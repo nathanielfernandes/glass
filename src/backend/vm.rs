@@ -85,10 +85,10 @@ impl VM {
         // let ten_millis = time::Duration::from_millis(200);
         // thread::sleep(ten_millis);
 
-        // if instruction != &Opcode::Noop {
-        //     // println!("{:?}", self.stack.internal);
-        //     println!("{:?}", instruction);
-        // }
+        if instruction != &Opcode::Noop {
+            // println!("{:?}", self.stack.internal);
+            // println!("{:?}", instruction);
+        }
 
         match instruction {
             Opcode::Halt => {

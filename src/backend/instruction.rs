@@ -70,66 +70,38 @@ impl Opcode {
         for expr in ast {
             Opcode::build(&mut program, expr.clone(), &mut state, 0, &mut next);
 
-            // if let Some(op) = program.last() {
-            //     match expr {
-            //         Expr::If(_, _, _) => {}
-            //         _ => {
-            //             if op.pushes_to_stack() {
-            //                 program.push(Opcode::Pop);
-            //             }
-            //         }
-            //     }
-            // }
+            if let Some(op) = program.last() {
+                match expr {
+                    Expr::If(_, _, _) => {}
+                    _ => {
+                        if op.pushes_to_stack() {
+                            program.push(Opcode::Pop);
+                        }
+                    }
+                }
+            }
         }
 
-        // let mut last = None;
-        // for (i, op) in program.clone().into_iter().enumerate() {
-        //     if let Some(l) = last.clone() {
-        //         match (l, op.clone()) {
-        //             (Opcode::Push(_), Opcode::Pop) => {
-        //                 program[i - 1] = Opcode::Noop;
-        //                 program[i] = Opcode::Noop;
-        //             }
-        //             (Opcode::Load(_), Opcode::Pop) => {
-        //                 program[i - 1] = Opcode::Noop;
-        //                 program[i] = Opcode::Noop;
-        //             }
-        //             _ => {}
-        //         }
-        //     }
+        let mut last = None;
+        for (i, op) in program.clone().into_iter().enumerate() {
+            if let Some(l) = last.clone() {
+                match (l, op.clone()) {
+                    (Opcode::Push(_), Opcode::Pop) => {
+                        program[i - 1] = Opcode::Noop;
+                        program[i] = Opcode::Noop;
+                    }
+                    (Opcode::Load(_), Opcode::Pop) => {
+                        program[i - 1] = Opcode::Noop;
+                        program[i] = Opcode::Noop;
+                    }
+                    _ => {}
+                }
+            }
 
-        //     last = Some(op);
-        // }
+            last = Some(op);
+        }
 
         program
-    }
-
-    pub fn branch_build(
-        ins: &mut Vec<Opcode>,
-        expr: Expr,
-        state: &mut State,
-        depth: usize,
-        next: &mut usize,
-        then: usize,
-        otherwise: usize,
-    ) {
-        match expr {
-            Expr::Or(lhs, rhs) => {
-                Self::build(ins, *lhs, state, depth, next);
-                ins.push(Opcode::JumpIf(then));
-                Self::build(ins, *rhs, state, depth, next);
-                ins.push(Opcode::JumpIfNot(otherwise));
-            }
-            Expr::And(lhs, rhs) => {
-                Self::build(ins, *lhs, state, depth, next);
-                ins.push(Opcode::JumpIfNot(otherwise));
-                Self::build(ins, *rhs, state, depth, next);
-                ins.push(Opcode::JumpIfNot(otherwise));
-            }
-            _ => {
-                Opcode::build(ins, expr, state, depth, next);
-            }
-        }
     }
 
     pub fn build(
@@ -198,6 +170,7 @@ impl Opcode {
 
             Expr::Function(name, args, code) => {
                 let top = ins.len();
+                ins.push(Opcode::Noop); // placeholder for return address
 
                 let depth = depth + 1;
 
@@ -229,40 +202,96 @@ impl Opcode {
                 push_literal!(Type::None);
                 op!(Self::Return);
 
-                ins.insert(top, Self::Jump(ins.len() + 1));
+                ins[top] = Self::Jump(ins.len());
 
                 // push_literal!(Type::Ref(top + 1));
 
                 op!(Self::Register(id, top + 1));
             }
             Expr::If(condition, then, otherwise) => {
-                let mut condition_block = vec![];
-                let mut then_block = vec![];
-                let mut otherwise_block = vec![];
+                match *condition {
+                    Expr::Bool(true) => {
+                        for expr in then {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+                    }
+                    Expr::Bool(false) => {
+                        for expr in otherwise {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+                    }
+                    Expr::Or(lhs, rhs) => {
+                        Self::build(ins, *lhs, state, depth, next);
+                        let jump_if_idx = ins.len();
+                        ins.push(Self::Noop);
 
-                Self::build(&mut condition_block, *condition, state, depth, next);
+                        Self::build(ins, *rhs, state, depth, next);
+                        let jump_if_not_idx = ins.len();
+                        ins.push(Self::Noop);
 
-                for expr in then {
-                    Self::build(&mut then_block, expr, state, depth, next);
+                        let then_jump_to = ins.len();
+                        for expr in then {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+                        let jump_idx = ins.len();
+                        ins.push(Self::Noop); // placeholder for Jump
+                        let jump_to = ins.len();
+
+                        for expr in otherwise {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+
+                        ins[jump_if_idx] = Self::JumpIf(then_jump_to);
+                        ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
+                        ins[jump_idx] = Self::Jump(ins.len());
+                    }
+                    Expr::And(lhs, rhs) => {
+                        Self::build(ins, *lhs, state, depth, next);
+                        let jump_if_idx = ins.len();
+                        ins.push(Self::Noop);
+
+                        Self::build(ins, *rhs, state, depth, next);
+                        let jump_if_not_idx = ins.len();
+                        ins.push(Self::Noop);
+
+                        let then_jump_to = ins.len();
+                        for expr in then {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+                        let jump_idx = ins.len();
+                        ins.push(Self::Noop); // placeholder for Jump
+                        let jump_to = ins.len();
+
+                        for expr in otherwise {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+
+                        ins[jump_if_idx] = Self::JumpIfNot(then_jump_to);
+                        ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
+                        ins[jump_idx] = Self::Jump(ins.len());
+                    }
+                    _ => {
+                        Self::build(ins, *condition, state, depth, next);
+
+                        let jump_if_not_idx = ins.len();
+                        ins.push(Self::Noop); // placeholder for JumpIfNot
+
+                        for expr in then {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+
+                        let jump_idx = ins.len();
+                        ins.push(Self::Noop); // placeholder for Jump
+                        let jump_to = ins.len();
+
+                        for expr in otherwise {
+                            Self::build(ins, expr, state, depth, next);
+                        }
+
+                        ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
+                        ins[jump_idx] = Self::Jump(ins.len());
+                    }
                 }
-
-                for expr in otherwise {
-                    Self::build(&mut otherwise_block, expr, state, depth, next);
-                }
-
-                // JumpIfNot to otherwise = +1
-                let c_len = condition_block.len() + 2;
-                // Jump to end            = +1
-                let t_len = c_len + then_block.len() + 2;
-
-                let o_len = t_len + otherwise_block.len();
-
-                condition_block.push(Self::JumpIfNot(t_len));
-                then_block.push(Opcode::Jump(o_len));
-
-                ins.extend(condition_block);
-                ins.extend(then_block);
-                ins.extend(otherwise_block);
             }
             Expr::Call(name, args) => {
                 let id = state.get(&name).expect("Function not found").clone();

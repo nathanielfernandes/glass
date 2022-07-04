@@ -13,8 +13,12 @@ use glass::frontend::parser;
 
 fn main() {
     let code = "
-        let x = 2
-        
+        let x = 0
+        if (false) {
+            x = 1
+        } else {
+            x = 2
+        }
     ";
 
     let ast = parser::parse_code(code).unwrap();
@@ -26,9 +30,9 @@ fn main() {
     println!("ln#\topcode    \tid/value");
 
     for (i, instruction) in program.iter().enumerate() {
-        if instruction != &Opcode::Noop {
-            println!("{}:\t{:?}", i, instruction);
-        }
+        // if instruction != &Opcode::Noop {
+        println!("{}:\t{:?}", i, instruction);
+        // }
     }
     println!();
 
