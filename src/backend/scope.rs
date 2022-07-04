@@ -15,11 +15,11 @@ pub type addr = usize;
 // }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Scope(pub FxHashMap<id, addr>);
+pub struct Scope(pub FxHashMap<id, addr>, pub addr);
 
 impl Scope {
-    pub fn new() -> Scope {
-        Scope(FxHashMap::default())
+    pub fn new(return_to: usize) -> Scope {
+        Scope(FxHashMap::default(), return_to)
     }
     #[inline]
     pub fn get(&self, id: id) -> Option<addr> {

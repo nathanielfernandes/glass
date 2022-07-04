@@ -1,4 +1,4 @@
-use std::{thread, time};
+use std::{thread, time, usize};
 
 use super::{
     instruction::{Opcode, Type},
@@ -12,11 +12,10 @@ pub struct VM {
     pub pc: usize,
 
     pub stack: Stack,
-    pub call_stack: Vec<usize>,
-
-    pub heap: Memory,
     pub scopes: Vec<Scope>,
     pub fp: usize,
+
+    pub heap: Memory,
 }
 
 impl VM {
@@ -26,10 +25,9 @@ impl VM {
             pc: 0,
 
             stack: Stack::new(),
-            call_stack: Vec::new(),
             heap: Memory::new(),
 
-            scopes: vec![Scope::new()],
+            scopes: vec![Scope::new(0)],
             fp: 0,
         }
     }
@@ -67,15 +65,16 @@ impl VM {
         }
     }
 
-    pub fn enter_scope(&mut self) {
-        self.scopes.push(Scope::new());
+    pub fn enter_scope(&mut self, return_to: usize) {
+        self.scopes.push(Scope::new(return_to));
         self.fp += 1;
     }
 
-    pub fn exit_scope(&mut self) {
+    pub fn exit_scope(&mut self) -> usize {
         let scope = self.scopes.pop().expect("Exited from empty scope");
         self.delete_locals(&scope);
         self.fp -= 1;
+        scope.1
     }
 
     pub fn step(&mut self) {
@@ -160,8 +159,7 @@ impl VM {
                 let id = *id;
                 let addr = self.all_scopes_get(id).expect("Call to undefined function");
 
-                self.enter_scope();
-                self.call_stack.push(self.pc);
+                self.enter_scope(self.pc);
                 self.pc = addr;
             }
             Opcode::Return => {
@@ -175,10 +173,7 @@ impl VM {
                         .push(StackValue::Literal(self.heap.get(*addr).to_owned())),
                 }
 
-                let addr = self.call_stack.pop().unwrap();
-                self.exit_scope();
-
-                self.pc = addr;
+                self.pc = self.exit_scope();
             }
 
             Opcode::Add => {
