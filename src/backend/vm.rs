@@ -48,6 +48,18 @@ impl VM {
         None
     }
 
+    pub fn all_scopes_get_desc(&self, id: id) -> Option<usize> {
+        let mut n = 0;
+        for scope in self.scopes.iter().rev() {
+            if let Some(addr) = scope.get(id - n) {
+                return Some(addr);
+            }
+            n += 1;
+        }
+
+        None
+    }
+
     pub fn pop_stack(&mut self) -> Type {
         let value = self.stack.pop();
 
@@ -61,6 +73,7 @@ impl VM {
 
     pub fn delete_locals(&mut self, scope: &Scope) {
         for addr in scope.0.values() {
+            // println!("DELETING LOCAL {}", addr);
             self.heap.delete(*addr);
         }
     }
@@ -84,10 +97,10 @@ impl VM {
         // let ten_millis = time::Duration::from_millis(200);
         // thread::sleep(ten_millis);
 
-        if instruction != &Opcode::Noop {
-            // println!("{:?}", self.stack.internal);
-            // println!("{:?}", instruction);
-        }
+        // if instruction != &Opcode::Noop {
+        //     // println!("{:?}", self.stack.internal);
+        //     println!("{:?}", instruction);
+        // }
 
         match instruction {
             Opcode::Halt => {
@@ -111,22 +124,52 @@ impl VM {
                     self.scopes[self.fp].set(id, addr);
                 }
             }
-            Opcode::Register(id, addr) => {
-                self.scopes[self.fp].set(*id + self.fp, *addr);
-            }
-            // Opcode::Register(id) => {
-            //     let id = *id + self.fp;
-            //     let value = self.pop_stack();
+            Opcode::StoreLocal(id) => {
+                let id = *id + self.fp;
+                let value = self.pop_stack();
 
-            //     if let Type::Ref(r) = value {
-            //         self.scopes[self.fp].set(id, r);
-            //     } else {
-            //         panic!("Register expects a reference");
-            //     }
-            // }
+                if let Some(addr) = self.scopes[self.fp].get(id) {
+                    self.heap.set(addr, value);
+                } else {
+                    let addr = self.heap.add(value);
+                    self.scopes[self.fp].set(id, addr);
+                }
+            }
+            Opcode::StoreGlobal(id) => {
+                let id = *id;
+                let value = self.pop_stack();
+
+                if let Some(addr) = self.scopes[0].get(id) {
+                    self.heap.set(addr, value);
+                } else {
+                    let addr = self.heap.add(value);
+                    self.scopes[self.fp].set(id, addr);
+                }
+            }
+
+            Opcode::Register(id, addr) => {
+                self.scopes[self.fp].set(*id, *addr);
+            }
             Opcode::Load(id) => {
                 let id = *id + self.fp;
-                let addr = self.all_scopes_get(id).expect("Undefined variable");
+                let addr = self.all_scopes_get(id).expect("Undefined variable ");
+                self.stack.push(StackValue::Addr(addr.clone()));
+            }
+            Opcode::LoadGlobal(id) => {
+                let addr = self.scopes[0].get(*id).expect("Undefined variable");
+                self.stack.push(StackValue::Addr(addr.clone()));
+            }
+            Opcode::LoadLocal(id) => {
+                let id = *id + self.fp;
+                let addr = self.scopes[self.fp].get(id).expect("Undefined variable");
+                self.stack.push(StackValue::Addr(addr.clone()));
+            }
+            Opcode::LoadName(id) => {
+                let id = *id + self.fp;
+                let addr = self.all_scopes_get_desc(id).expect("Undefined variable");
+
+                // let value = self.heap.get(addr);
+                // self.stack.push(StackValue::Literal(value.clone()));
                 self.stack.push(StackValue::Addr(addr.clone()));
             }
             Opcode::Jump(to) => {
@@ -155,12 +198,20 @@ impl VM {
                 }
             }
 
-            Opcode::Call(id) => {
-                let id = *id;
-                let addr = self.all_scopes_get(id).expect("Call to undefined function");
+            Opcode::Call => {
+                // let addr = self.all_scopes_get(id).expect("Call to undefined function");
+                let top = self.pop_stack();
+                if let Type::FuncPtr(jump) = top {
+                    // let jump = *jump;
+                    self.enter_scope(self.pc);
+                    self.pc = jump;
+                } else {
+                    panic!("Call to non-function {:?}", top);
+                }
 
-                self.enter_scope(self.pc);
-                self.pc = addr;
+                // let addr = self.scopes[self.fp]
+                //     .get(id)
+                //     .expect("Call to undefined function");
             }
             Opcode::Return => {
                 let value = &self.stack.pop();

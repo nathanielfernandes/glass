@@ -5,7 +5,7 @@ use std::fmt;
 
 use super::{memory::addr, scope::id, stack::StackValue};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Type {
     Number(f64),
     String(String),
@@ -14,9 +14,24 @@ pub enum Type {
     Null,
 
     Addr(usize),
-    Ref(usize),
+    FuncPtr(usize),
 
     Error(String),
+}
+
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Number(n) => write!(f, "num({})", n),
+            Type::String(s) => write!(f, "str({})", s),
+            Type::Bool(b) => write!(f, "bool({})", b),
+            Type::None => write!(f, "none"),
+            Type::Null => write!(f, "null"),
+            Type::Addr(addr) => write!(f, "#{}", addr),
+            Type::FuncPtr(addr) => write!(f, "fn(@{})", addr),
+            Type::Error(s) => write!(f, "Error({})", s),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -26,8 +41,13 @@ pub enum Opcode {
     Halt,
 
     Load(id),
+    LoadLocal(id),
+    LoadGlobal(id),
+    LoadName(id),
+
     Store(id),
-    Set(id),
+    StoreLocal(id),
+    StoreGlobal(id),
 
     Register(id, addr),
 
@@ -37,7 +57,7 @@ pub enum Opcode {
     Jump(usize),
     JumpIf(usize),
     JumpIfNot(usize),
-    Call(id),
+    Call,
     Return,
 
     Add,
@@ -60,27 +80,30 @@ pub enum Opcode {
     Print,
 }
 
-pub type State = FxHashMap<String, usize>;
+pub type State = FxHashMap<String, (usize, usize)>;
 
 impl Opcode {
     pub fn compile(ast: AST) -> Vec<Opcode> {
         let mut program = vec![];
         let mut state = FxHashMap::default();
         let mut next = 0;
-        for expr in ast {
-            Opcode::build(&mut program, expr.clone(), &mut state, 0, &mut next);
 
-            if let Some(op) = program.last() {
-                match expr {
-                    Expr::If(_, _, _) => {}
-                    _ => {
-                        if op.pushes_to_stack() {
-                            program.push(Opcode::Pop);
-                        }
-                    }
-                }
-            }
-        }
+        Self::iter_build(&mut program, ast, &mut state, 0, &mut next);
+
+        // for expr in ast {
+        //     Opcode::build(&mut program, expr.clone(), &mut state, 0, &mut next);
+
+        //     if let Some(op) = program.last() {
+        //         match expr {
+        //             Expr::If(_, _, _) => {}
+        //             _ => {
+        //                 if op.pushes_to_stack() {
+        //                     program.push(Opcode::Pop);
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         let mut last = None;
         for (i, op) in program.clone().into_iter().enumerate() {
@@ -104,6 +127,29 @@ impl Opcode {
         program
     }
 
+    pub fn iter_build(
+        ins: &mut Vec<Opcode>,
+        code: Vec<Expr>,
+        state: &mut State,
+        depth: usize,
+        next: &mut usize,
+    ) {
+        for expr in code {
+            Self::build(ins, expr.clone(), state, depth, next);
+
+            if let Some(op) = ins.last() {
+                match expr {
+                    Expr::If(_, _, _) => {}
+                    _ => {
+                        if op.pushes_to_stack() {
+                            ins.push(Opcode::Pop);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn build(
         ins: &mut Vec<Opcode>,
         expr: Expr,
@@ -123,7 +169,35 @@ impl Opcode {
         }
         macro_rules! build {
             ($val:expr) => {
-                Self::build(ins, $val, state, depth + 1, next)
+                Self::build(ins, $val, state, depth, next)
+            };
+            ($val:expr, $incr:expr) => {
+                Self::build(ins, $val, state, depth + $incr, next)
+            };
+        }
+
+        macro_rules! load {
+            ($id:expr, $d:expr) => {
+                if $d == 0 {
+                    ins.push(Self::LoadGlobal($id))
+                } else if $d == depth {
+                    ins.push(Self::LoadLocal($id))
+                } else {
+                    ins.push(Self::Load($id))
+                }
+            };
+        }
+
+        macro_rules! store {
+            ($id:expr, $d:expr) => {
+                // println!("{:?} {:?}", $d, depth);
+                if $d == 0 {
+                    ins.push(Self::StoreGlobal($id))
+                } else if $d == depth {
+                    ins.push(Self::StoreLocal($id))
+                } else {
+                    ins.push(Self::Store($id))
+                }
             };
         }
 
@@ -144,81 +218,104 @@ impl Opcode {
                 build!(*value);
                 // Self::build(ins, *value, state, depth + 1, next, stack);
                 // let id = get_id(&name) + depth;
-                if let Some(id) = state.get(&name) {
-                    op!(Self::Store(*id));
+                if let Some((id, dep)) = state.get(&name) {
+                    // op!(Self::Store(*id));
+                    store!(*id, *dep);
                 } else {
                     let id = depth + *next;
 
                     *next += 1;
-                    state.insert(name, id.clone());
-                    op!(Self::Store(id));
+                    state.insert(name, (id.clone(), depth));
+                    // op!(Self::Store(id));
+                    store!(id, depth);
                 }
             }
             Expr::Assignment(name, value) => {
-                let id = state.get(&name).expect("Variable not found").clone();
+                let (id, dep) = state
+                    .get(&name)
+                    .expect(&format!("Variable not found {}", name))
+                    .clone();
                 // let id = get_id(&name);
                 *next += 1;
                 build!(*value);
                 // Self::build(ins, *value, state, depth + 1, next, stack);
-                op!(Self::Store(id));
+                // op!(Self::Store(id));
+                store!(id, dep);
             }
             Expr::Symbol(name) => {
-                let id = state.get(&name).expect("Variable not found").clone();
+                let (id, d) = state
+                    .get(&name)
+                    .expect(&format!("Variable not found {}", name))
+                    .clone();
                 // let id = get_id(&name);
-                op!(Self::Load(id));
+                // op!(Self::Load(id));
+                load!(id, d);
             }
 
             Expr::Function(name, args, code) => {
                 let top = ins.len();
                 ins.push(Opcode::Noop); // placeholder for return address
 
-                let depth = depth + 1;
+                // let depth = depth + 1;
 
-                let id = depth - 1 + *next;
+                let id: usize = if let Some((id, _)) = state.get(&name) {
+                    *id
+                } else {
+                    depth + *next
+                };
+
+                // let id =
                 // let id = get_id(&name) + depth - 1;
 
                 *next += 1;
-                state.insert(name, id.clone());
+                state.insert(name, (id.clone(), depth));
 
                 let mut fn_state = state.clone();
 
                 let mut arg_ids = vec![];
                 for arg in args {
-                    let id = depth + *next;
+                    let id = depth + 1 + *next;
                     // let id = get_id(&arg) + depth;
                     *next += 1;
-                    fn_state.insert(arg, id.clone());
+                    fn_state.insert(arg, (id.clone(), depth + 1));
                     arg_ids.push(id);
                 }
 
                 for arg in arg_ids {
-                    op!(Self::Store(arg));
+                    // op!(Self::Store(arg));
+                    // store!(arg, depth + 1);
+                    op!(Self::StoreLocal(arg));
                 }
 
-                for expr in code {
-                    Self::build(ins, expr, &mut fn_state, depth, next);
-                }
+                // for expr in code {
+                //     Self::build(ins, expr, &mut fn_state, depth, next);
+                // }
+                Self::iter_build(ins, code, &mut fn_state, depth + 1, next);
 
                 push_literal!(Type::None);
                 op!(Self::Return);
 
                 ins[top] = Self::Jump(ins.len());
 
-                // push_literal!(Type::Ref(top + 1));
+                push_literal!(Type::FuncPtr(top + 1));
+                // op!(Self::Store(id));
+                store!(id, depth);
 
-                op!(Self::Register(id, top + 1));
+                // op!(Self::Register(id, top + 1));
             }
             Expr::If(condition, then, otherwise) => {
                 match *condition {
                     Expr::Bool(true) => {
-                        for expr in then {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in then {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, then, state, depth, next);
                     }
                     Expr::Bool(false) => {
-                        for expr in otherwise {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in otherwise {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, otherwise, state, depth, next);
                     }
                     Expr::Or(lhs, rhs) => {
                         Self::build(ins, *lhs, state, depth, next);
@@ -230,16 +327,19 @@ impl Opcode {
                         ins.push(Self::Noop);
 
                         let then_jump_to = ins.len();
-                        for expr in then {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in then {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, then, state, depth, next);
+
                         let jump_idx = ins.len();
                         ins.push(Self::Noop); // placeholder for Jump
                         let jump_to = ins.len();
 
-                        for expr in otherwise {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in otherwise {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, otherwise, state, depth, next);
 
                         ins[jump_if_idx] = Self::JumpIf(then_jump_to);
                         ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
@@ -255,16 +355,19 @@ impl Opcode {
                         ins.push(Self::Noop);
 
                         let then_jump_to = ins.len();
-                        for expr in then {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in then {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, then, state, depth, next);
+
                         let jump_idx = ins.len();
                         ins.push(Self::Noop); // placeholder for Jump
                         let jump_to = ins.len();
 
-                        for expr in otherwise {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in otherwise {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, otherwise, state, depth, next);
 
                         ins[jump_if_idx] = Self::JumpIfNot(then_jump_to);
                         ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
@@ -276,17 +379,19 @@ impl Opcode {
                         let jump_if_not_idx = ins.len();
                         ins.push(Self::Noop); // placeholder for JumpIfNot
 
-                        for expr in then {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in then {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, then, state, depth, next);
 
                         let jump_idx = ins.len();
                         ins.push(Self::Noop); // placeholder for Jump
                         let jump_to = ins.len();
 
-                        for expr in otherwise {
-                            Self::build(ins, expr, state, depth, next);
-                        }
+                        // for expr in otherwise {
+                        //     Self::build(ins, expr, state, depth, next);
+                        // }
+                        Self::iter_build(ins, otherwise, state, depth, next);
 
                         ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
                         ins[jump_idx] = Self::Jump(ins.len());
@@ -294,17 +399,23 @@ impl Opcode {
                 }
             }
             Expr::Call(name, args) => {
-                let id = state.get(&name).expect("Function not found").clone();
+                let (id, dep) = state.get(&name).expect("Function not found").clone();
 
-                for arg in args {
-                    build!(arg);
+                for arg in args.into_iter().rev() {
+                    build!(arg, dep);
                 }
-                op!(Self::Call(id));
+
+                if dep != 0 && dep < depth {
+                    op!(Self::LoadName(id))
+                } else {
+                    load!(id, dep);
+                }
+                op!(Self::Call);
             }
             Expr::Return(expr) => {
                 // build!(*expr);
 
-                Self::build(ins, *expr, state, depth - 1, next);
+                Self::build(ins, *expr, state, depth, next);
                 op!(Self::Return);
             }
             Expr::Add(lhs, rhs) => {
@@ -398,9 +509,14 @@ impl Opcode {
             Self::Pop => false,
             Self::Print => false,
             Self::Store(_) => false,
+            Self::StoreGlobal(_) => false,
+            Self::StoreLocal(_) => false,
             Self::Register(_, _) => false,
-            Self::Call(_) => false,
+            Self::Call => false,
             Self::Return => false,
+            Self::JumpIfNot(_) => false,
+            Self::JumpIf(_) => false,
+            Self::Noop => false,
 
             _ => true,
         }
@@ -413,16 +529,22 @@ impl fmt::Debug for Opcode {
             Self::Noop => write!(f, "Noop"),
             Self::Halt => write!(f, "Halt"),
             Self::Load(id) => write!(f, "Load    \t{}", id),
+            Self::LoadLocal(id) => write!(f, "LoadLocal\t{}", id),
+            Self::LoadGlobal(id) => write!(f, "LoadGlobal\t{}", id),
+            Self::LoadName(id) => write!(f, "LoadName    \t{}", id),
+
             Self::Store(id) => write!(f, "Store    \t{}", id),
+            Self::StoreLocal(id) => write!(f, "StoreLocal\t{}", id),
+            Self::StoreGlobal(id) => write!(f, "StoreGlobal\t{}", id),
+
             Self::Register(id, addr) => write!(f, "Register\t{} {addr}", id),
-            Self::Set(id) => write!(f, "Set\t{}", id),
 
             Self::Push(arg) => write!(f, "Push    \t{:?}", arg),
             Self::Pop => write!(f, "Pop"),
             Self::Jump(id) => write!(f, "Jump    \t{}", id),
             Self::JumpIf(id) => write!(f, "JumpIf  \t{}", id),
             Self::JumpIfNot(id) => write!(f, "JumpIfNot\t{}", id),
-            Self::Call(id) => write!(f, "Call    \t{}", id),
+            Self::Call => write!(f, "Call"),
             Self::Return => write!(f, "Return"),
 
             Self::Print => write!(f, "Print"),
