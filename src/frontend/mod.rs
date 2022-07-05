@@ -1,7 +1,6 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Comment(String),
-
+    // Comment(String),
     Number(f64),
     String(String),
     Bool(bool),

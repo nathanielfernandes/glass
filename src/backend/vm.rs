@@ -1,14 +1,14 @@
 use std::{thread, time, usize};
 
 use super::{
-    instruction::{Opcode, Type},
+    instruction::{Instr, Type},
     memory::Memory,
     scope::{id, Scope},
     stack::{Stack, StackValue},
 };
 
 pub struct VM {
-    pub program: Vec<Opcode>,
+    pub program: Vec<Instr>,
     pub pc: usize,
 
     pub stack: Stack,
@@ -103,17 +103,17 @@ impl VM {
         // }
 
         match instruction {
-            Opcode::Halt => {
+            Instr::Halt => {
                 println!("Halt");
                 return;
             }
-            Opcode::Push(value) => {
+            Instr::Push(value) => {
                 self.stack.push(value.to_owned());
             }
-            Opcode::Pop => {
+            Instr::Pop => {
                 self.stack.pop();
             }
-            Opcode::Store(id) => {
+            Instr::Store(id) => {
                 let id = *id + self.fp;
                 let value = self.pop_stack();
 
@@ -124,7 +124,7 @@ impl VM {
                     self.scopes[self.fp].set(id, addr);
                 }
             }
-            Opcode::StoreLocal(id) => {
+            Instr::StoreLocal(id) => {
                 let id = *id + self.fp;
                 let value = self.pop_stack();
 
@@ -135,7 +135,7 @@ impl VM {
                     self.scopes[self.fp].set(id, addr);
                 }
             }
-            Opcode::StoreGlobal(id) => {
+            Instr::StoreGlobal(id) => {
                 let id = *id;
                 let value = self.pop_stack();
 
@@ -147,24 +147,24 @@ impl VM {
                 }
             }
 
-            Opcode::Register(id, addr) => {
+            Instr::Register(id, addr) => {
                 self.scopes[self.fp].set(*id, *addr);
             }
-            Opcode::Load(id) => {
+            Instr::Load(id) => {
                 let id = *id + self.fp;
                 let addr = self.all_scopes_get(id).expect("Undefined variable ");
                 self.stack.push(StackValue::Addr(addr.clone()));
             }
-            Opcode::LoadGlobal(id) => {
+            Instr::LoadGlobal(id) => {
                 let addr = self.scopes[0].get(*id).expect("Undefined variable");
                 self.stack.push(StackValue::Addr(addr.clone()));
             }
-            Opcode::LoadLocal(id) => {
+            Instr::LoadLocal(id) => {
                 let id = *id + self.fp;
                 let addr = self.scopes[self.fp].get(id).expect("Undefined variable");
                 self.stack.push(StackValue::Addr(addr.clone()));
             }
-            Opcode::LoadName(id) => {
+            Instr::LoadName(id) => {
                 let id = *id + self.fp;
                 let addr = self.all_scopes_get_desc(id).expect("Undefined variable");
 
@@ -172,10 +172,10 @@ impl VM {
                 // self.stack.push(StackValue::Literal(value.clone()));
                 self.stack.push(StackValue::Addr(addr.clone()));
             }
-            Opcode::Jump(to) => {
+            Instr::Jump(to) => {
                 self.pc = *to;
             }
-            Opcode::JumpIf(to) => {
+            Instr::JumpIf(to) => {
                 let to = *to;
                 let value = self.pop_stack();
 
@@ -186,7 +186,7 @@ impl VM {
                     self.pc = to;
                 }
             }
-            Opcode::JumpIfNot(to) => {
+            Instr::JumpIfNot(to) => {
                 let to = *to;
                 let value = self.pop_stack();
 
@@ -198,7 +198,7 @@ impl VM {
                 }
             }
 
-            Opcode::Call => {
+            Instr::Call => {
                 // let addr = self.all_scopes_get(id).expect("Call to undefined function");
                 let top = self.pop_stack();
                 if let Type::FuncPtr(jump) = top {
@@ -213,7 +213,7 @@ impl VM {
                 //     .get(id)
                 //     .expect("Call to undefined function");
             }
-            Opcode::Return => {
+            Instr::Return => {
                 let value = &self.stack.pop();
                 match value {
                     StackValue::Literal(_) => {
@@ -227,7 +227,7 @@ impl VM {
                 self.pc = self.exit_scope();
             }
 
-            Opcode::Add => {
+            Instr::Add => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -239,7 +239,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Sub => {
+            Instr::Sub => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -250,7 +250,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Mul => {
+            Instr::Mul => {
                 let lhs = self.pop_stack();
                 let rhs = self.pop_stack();
 
@@ -261,7 +261,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Div => {
+            Instr::Div => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -272,7 +272,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Mod => {
+            Instr::Mod => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -283,7 +283,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Eq => {
+            Instr::Eq => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -296,7 +296,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Neq => {
+            Instr::Neq => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -309,7 +309,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Lt => {
+            Instr::Lt => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -320,7 +320,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Gt => {
+            Instr::Gt => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -331,7 +331,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Lte => {
+            Instr::Lte => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -342,7 +342,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Gte => {
+            Instr::Gte => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -353,7 +353,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::And => {
+            Instr::And => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -364,7 +364,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Or => {
+            Instr::Or => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -375,7 +375,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Not => {
+            Instr::Not => {
                 let value = self.pop_stack();
 
                 let result = match value {
@@ -385,7 +385,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Neg => {
+            Instr::Neg => {
                 let value = self.pop_stack();
 
                 let result = match value {
@@ -395,7 +395,7 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Pow => {
+            Instr::Pow => {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
@@ -406,13 +406,13 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Print => match self.pop_stack() {
+            Instr::Print => match self.pop_stack() {
                 Type::String(value) => println!("{}", value),
                 Type::Number(value) => println!("{}", value),
                 Type::Bool(value) => println!("{}", value),
                 _ => panic!("Print not supported"),
             },
-            Opcode::Noop => {}
+            Instr::Noop => {}
             _ => {
                 println!("NOT HANDLED: {:?}", instruction);
             }

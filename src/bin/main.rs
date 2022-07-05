@@ -2,12 +2,12 @@ use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::path;
 
-use glass::backend::instruction::Opcode;
+use glass::backend::instruction::Instr;
 use glass::backend::vm::VM;
 
 use glass::frontend::parser;
 
-fn write_program(program: &Vec<Opcode>, path: &path::Path) {
+fn write_program(program: &Vec<Instr>, path: &path::Path) {
     let mut file = File::create(path).unwrap();
     write!(file, "ln#\topcode    \tid/value\n").unwrap();
     write!(file, "-------------------------\n").unwrap();
@@ -22,7 +22,7 @@ fn main() {
 
     let ast = parser::parse_code(&code).unwrap();
 
-    let program = Opcode::compile(ast);
+    let program = Instr::compile(ast);
 
     write_program(&program, path::Path::new("src/bin/test.rv.out"));
 

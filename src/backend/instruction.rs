@@ -3,12 +3,7 @@ use crate::frontend::{Expr, AST};
 use fxhash::FxHashMap;
 use std::fmt;
 
-use super::{
-    memory::addr,
-    scope::id,
-    stack::StackValue,
-    stdlib::{self, add_std},
-};
+use super::{memory::addr, scope::id, stack::StackValue, stdlib::add_std};
 
 #[derive(Clone, PartialEq)]
 pub enum Type {
@@ -40,7 +35,7 @@ impl fmt::Debug for Type {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum Opcode {
+pub enum Instr {
     Noop,
 
     Halt,
@@ -87,8 +82,8 @@ pub enum Opcode {
 
 pub type State = FxHashMap<String, (usize, usize)>;
 
-impl Opcode {
-    pub fn compile(ast: AST) -> Vec<Opcode> {
+impl Instr {
+    pub fn compile(ast: AST) -> Vec<Instr> {
         let mut program = vec![];
         let mut state = FxHashMap::default();
         let mut next = 0;
@@ -100,13 +95,13 @@ impl Opcode {
         for (i, op) in program.clone().into_iter().enumerate() {
             if let Some(l) = last.clone() {
                 match (l, op.clone()) {
-                    (Opcode::Push(_), Opcode::Pop) => {
-                        program[i - 1] = Opcode::Noop;
-                        program[i] = Opcode::Noop;
+                    (Instr::Push(_), Instr::Pop) => {
+                        program[i - 1] = Instr::Noop;
+                        program[i] = Instr::Noop;
                     }
-                    (Opcode::Load(_), Opcode::Pop) => {
-                        program[i - 1] = Opcode::Noop;
-                        program[i] = Opcode::Noop;
+                    (Instr::Load(_), Instr::Pop) => {
+                        program[i - 1] = Instr::Noop;
+                        program[i] = Instr::Noop;
                     }
                     _ => {}
                 }
@@ -119,7 +114,7 @@ impl Opcode {
     }
 
     pub fn iter_build(
-        ins: &mut Vec<Opcode>,
+        ins: &mut Vec<Instr>,
         code: Vec<Expr>,
         state: &mut State,
         depth: usize,
@@ -133,7 +128,7 @@ impl Opcode {
                     Expr::If(_, _, _) => {}
                     _ => {
                         if op.pushes_to_stack() {
-                            ins.push(Opcode::Pop);
+                            ins.push(Instr::Pop);
                         }
                     }
                 }
@@ -142,7 +137,7 @@ impl Opcode {
     }
 
     pub fn build(
-        ins: &mut Vec<Opcode>,
+        ins: &mut Vec<Instr>,
         expr: Expr,
         state: &mut State,
         depth: usize,
@@ -245,7 +240,7 @@ impl Opcode {
 
             Expr::Function(name, args, code) => {
                 let top = ins.len();
-                ins.push(Opcode::Noop); // placeholder for return address
+                ins.push(Instr::Noop); // placeholder for return address
 
                 // let depth = depth + 1;
 
@@ -412,80 +407,80 @@ impl Opcode {
             Expr::Add(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Add);
+                op!(Instr::Add);
             }
             Expr::Sub(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Sub);
+                op!(Instr::Sub);
             }
             Expr::Mul(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Mul);
+                op!(Instr::Mul);
             }
             Expr::Div(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Div);
+                op!(Instr::Div);
             }
             Expr::Mod(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Mod);
+                op!(Instr::Mod);
             }
             Expr::Pow(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Pow);
+                op!(Instr::Pow);
             }
             Expr::Eq(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Eq);
+                op!(Instr::Eq);
             }
             Expr::Neq(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Neq);
+                op!(Instr::Neq);
             }
             Expr::Lt(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Lt);
+                op!(Instr::Lt);
             }
             Expr::Gt(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Gt);
+                op!(Instr::Gt);
             }
             Expr::Lte(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Lte);
+                op!(Instr::Lte);
             }
             Expr::Gte(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Gte);
+                op!(Instr::Gte);
             }
             Expr::And(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::And);
+                op!(Instr::And);
             }
             Expr::Or(lhs, rhs) => {
                 build!(*lhs);
                 build!(*rhs);
-                op!(Opcode::Or);
+                op!(Instr::Or);
             }
             Expr::Not(expr) => {
                 build!(*expr);
-                op!(Opcode::Not);
+                op!(Instr::Not);
             }
             Expr::Neg(expr) => {
                 build!(*expr);
-                op!(Opcode::Neg);
+                op!(Instr::Neg);
             }
             _ => {
                 panic!("Not implemented");
@@ -514,7 +509,7 @@ impl Opcode {
     }
 }
 
-impl fmt::Debug for Opcode {
+impl fmt::Debug for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Noop => write!(f, "Noop"),

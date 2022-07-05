@@ -1,5 +1,5 @@
 use super::{
-    instruction::{Opcode, State, Type},
+    instruction::{Instr, State, Type},
     stack::StackValue,
 };
 
@@ -11,7 +11,7 @@ fn get_id(name: &str, state: &State, depth: usize, next: usize) -> usize {
     }
 }
 
-pub fn add_std(ins: &mut Vec<Opcode>, state: &mut State, depth: usize, next: &mut usize) {
+pub fn add_std(ins: &mut Vec<Instr>, state: &mut State, depth: usize, next: &mut usize) {
     macro_rules! op {
         ($op:expr) => {
             ins.push($op)
@@ -19,7 +19,7 @@ pub fn add_std(ins: &mut Vec<Opcode>, state: &mut State, depth: usize, next: &mu
     }
     macro_rules! push_literal {
         ($val:expr) => {
-            ins.push(Opcode::Push(StackValue::Literal($val)))
+            ins.push(Instr::Push(StackValue::Literal($val)))
         };
     }
     macro_rules! build {
@@ -34,11 +34,11 @@ pub fn add_std(ins: &mut Vec<Opcode>, state: &mut State, depth: usize, next: &mu
     macro_rules! load {
         ($id:expr, $d:expr) => {
             if $d == 0 {
-                ins.push(Opcode::LoadGlobal($id))
+                ins.push(Instr::LoadGlobal($id))
             } else if $d == depth {
-                ins.push(Opcode::LoadLocal($id))
+                ins.push(Instr::LoadLocal($id))
             } else {
-                ins.push(Opcode::Load($id))
+                ins.push(Instr::Load($id))
             }
         };
     }
@@ -47,11 +47,11 @@ pub fn add_std(ins: &mut Vec<Opcode>, state: &mut State, depth: usize, next: &mu
         ($id:expr, $d:expr) => {
             // println!("{:?} {:?}", $d, depth);
             if $d == 0 {
-                ins.push(Opcode::StoreGlobal($id))
+                ins.push(Instr::StoreGlobal($id))
             } else if $d == depth {
-                ins.push(Opcode::StoreLocal($id))
+                ins.push(Instr::StoreLocal($id))
             } else {
-                ins.push(Opcode::Store($id))
+                ins.push(Instr::Store($id))
             }
         };
     }
@@ -63,10 +63,10 @@ pub fn add_std(ins: &mut Vec<Opcode>, state: &mut State, depth: usize, next: &mu
     *next += 1;
     state.insert("print".to_string(), (id, depth));
 
-    op!(Opcode::Jump(top + 4));
-    op!(Opcode::Print);
+    op!(Instr::Jump(top + 4));
+    op!(Instr::Print);
     push_literal!(Type::None);
-    op!(Opcode::Return);
+    op!(Instr::Return);
     push_literal!(Type::FuncPtr(top + 1));
     store!(id, depth);
 }
