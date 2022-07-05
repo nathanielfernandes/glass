@@ -6,38 +6,50 @@ pub enum Expr {
     Bool(bool),
     None,
 
-    Symbol(String),
+    Identifier(String),
 
     Declaration(String, Box<Expr>),
     Assignment(String, Box<Expr>),
 
-    Function(String, Vec<String>, Vec<Expr>),
+    Function {
+        name: String,
+        args: Vec<String>,
+        body: Vec<Expr>,
+    },
     Lambda(Vec<String>, Vec<Expr>),
     Call(String, Vec<Expr>),
 
-    Neg(Box<Expr>),
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Mod(Box<Expr>, Box<Expr>),
-    Pow(Box<Expr>, Box<Expr>),
-
-    Not(Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
-    Eq(Box<Expr>, Box<Expr>),
-    Neq(Box<Expr>, Box<Expr>),
-    Lt(Box<Expr>, Box<Expr>),
-    Lte(Box<Expr>, Box<Expr>),
-    Gt(Box<Expr>, Box<Expr>),
-    Gte(Box<Expr>, Box<Expr>),
+    Op(Op, Box<Expr>, Box<Expr>),
     // Error(String),
-    If(Box<Expr>, Vec<Expr>, Vec<Expr>),
+    If {
+        condition: Box<Expr>,
+        then: Vec<Expr>,
+        otherwise: Vec<Expr>,
+    },
     // While(Box<Expr>, Box<Expr>),
     Return(Box<Expr>),
     // Break,
     // Continue,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+    Not,
+    Neg,
 }
 
 pub type AST = Vec<Node>;
@@ -70,9 +82,9 @@ peg::parser!(
 
         rule function() -> Expr
         = _ "fn" __ name:symbol() _
-        "(" params:(symbol() ** ",") ")" _
-        code:block() _
-        { Expr::Function(name, params, code)}
+        "(" args:(symbol() ** ",") ")" _
+        body:block() _
+        { Expr::Function {name, args, body} }
 
         rule lambda() -> Expr
         = _ "(" params:(symbol() ** ",") ")" _ "=>" _
@@ -103,57 +115,53 @@ peg::parser!(
         = "else" _ res:(_else() / _elif()) {res}
         rule if_condition() -> Expr
         = _ "if" _ condition:operation() _ then:block() _ otherwise:(else_elif())? _ {
-            Expr::If(Box::new(condition), then, otherwise.unwrap_or(vec![]))
+            Expr::If{ condition: Box::new(condition), then, otherwise: otherwise.unwrap_or(vec![])}
         }
-
-
-
-
 
         rule arithmetic() -> Expr
         = precedence! {
             _ "(" _ x:arithmetic() _ ")" _ { x }
             --
-            x:symbol() _ "++" _ { Expr::Assignment(x.clone(), Box::new(Expr::Add(Box::new(Expr::Symbol(x)), Box::new(Expr::Number(1.0))))) }
-            x:symbol() _ "--" _ { Expr::Assignment(x.clone(), Box::new(Expr::Sub(Box::new(Expr::Symbol(x)), Box::new(Expr::Number(1.0))))) }
-            x:symbol() _ "+=" _ y:@ { Expr::Assignment(x.clone(), Box::new(Expr::Add(Box::new(Expr::Symbol(x)), Box::new(y)))) }
-            x:symbol() _ "-=" _ y:@ { Expr::Assignment(x.clone(), Box::new(Expr::Sub(Box::new(Expr::Symbol(x)), Box::new(y)))) }
-            x:symbol() _ "*=" _ y:@ { Expr::Assignment(x.clone(), Box::new(Expr::Mul(Box::new(Expr::Symbol(x)), Box::new(y)))) }
-            x:symbol() _ "/=" _ y:@ { Expr::Assignment(x.clone(), Box::new(Expr::Div(Box::new(Expr::Symbol(x)), Box::new(y)))) }
-            x:symbol() _ "%=" _ y:@ { Expr::Assignment(x.clone(), Box::new(Expr::Mod(Box::new(Expr::Symbol(x)), Box::new(y)))) }
-            x:symbol() _ "**=" _ y:@ { Expr::Assignment(x.clone(), Box::new(Expr::Pow(Box::new(Expr::Symbol(x)), Box::new(y)))) }
+            x:symbol() _ "++" _ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Add, Box::new(Expr::Identifier(x)), Box::new(Expr::Number(1.0)))))}
+            x:symbol() _ "--" _ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Sub, Box::new(Expr::Identifier(x)), Box::new(Expr::Number(1.0)))))}
+            x:symbol() _ "+=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Add, Box::new(Expr::Identifier(x)), Box::new(y))))}
+            x:symbol() _ "-=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Sub, Box::new(Expr::Identifier(x)), Box::new(y))))}
+            x:symbol() _ "*=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Mul, Box::new(Expr::Identifier(x)), Box::new(y))))}
+            x:symbol() _ "/=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Div, Box::new(Expr::Identifier(x)), Box::new(y))))}
+            x:symbol() _ "%=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Mod, Box::new(Expr::Identifier(x)), Box::new(y))))}
+            x:symbol() _ "**=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Pow, Box::new(Expr::Identifier(x)), Box::new(y))))}
             --
-            x:(@) _ "+" _  y:@ { Expr::Add(Box::new(x), Box::new(y)) }
-            x:(@) _ "-" _  y:@ { Expr::Sub(Box::new(x), Box::new(y)) }
+            x:(@) _ "+" _  y:@ {Expr::Op(Op::Add, Box::new(x), Box::new(y))}
+            x:(@) _ "-" _  y:@ {Expr::Op(Op::Sub, Box::new(x), Box::new(y))}
             --
-            x:(@) _ "*" _  y:@ { Expr::Mul(Box::new(x), Box::new(y)) }
-            x:(@) _ "/" _  y:@ { Expr::Div(Box::new(x), Box::new(y)) }
-            x:(@) _ "%" _  y:@ { Expr::Mod(Box::new(x), Box::new(y)) }
+            x:(@) _ "*" _  y:@ {Expr::Op(Op::Mul, Box::new(x), Box::new(y))}
+            x:(@) _ "/" _  y:@ {Expr::Op(Op::Div, Box::new(x), Box::new(y))}
+            x:(@) _ "%" _  y:@ {Expr::Op(Op::Mod, Box::new(x), Box::new(y))}
             --
-            x:(@) _ "**" _  y:@ { Expr::Pow(Box::new(x), Box::new(y)) }
+            x:(@) _ "**" _  y:@ {Expr::Op(Op::Pow, Box::new(x), Box::new(y))}
             --
             x:value_end() { x }
-            "-" _ e:arithmetic() { Expr::Neg(Box::new(e)) }
+            "-" _ e:arithmetic() { Expr::Op(Op::Neg, Box::new(e), Box::new(Expr::None)) }
         }
 
         rule operation() -> Expr
         = precedence! {
             "(" _ x:operation() _ ")" _ { x }
             --
-            x:(@) _ "&&" _  y:@ { Expr::And(Box::new(x), Box::new(y)) }
-            x:(@) _ "||" _  y:@ { Expr::Or(Box::new(x), Box::new(y)) }
+            x:(@) _ "&&" _  y:@ { Expr::Op(Op::And, Box::new(x), Box::new(y)) }
+            x:(@) _ "||" _  y:@ { Expr::Op(Op::Or, Box::new(x), Box::new(y)) }
             --
-            x:(@) _ "==" _  y:@ { Expr::Eq(Box::new(x), Box::new(y)) }
-            x:(@) _ "!=" _  y:@ { Expr::Neq(Box::new(x), Box::new(y)) }
+            x:(@) _ "==" _  y:@ { Expr::Op(Op::Eq, Box::new(x), Box::new(y)) }
+            x:(@) _ "!=" _  y:@ { Expr::Op(Op::Neq, Box::new(x), Box::new(y)) }
             --
-            x:(@) _ ">=" _  y:@ { Expr::Gte(Box::new(x), Box::new(y)) }
-            x:(@) _ "<=" _  y:@ { Expr::Lte(Box::new(x), Box::new(y)) }
+            x:(@) _ ">=" _  y:@ { Expr::Op(Op::Gte, Box::new(x), Box::new(y)) }
+            x:(@) _ "<=" _  y:@ { Expr::Op(Op::Lte, Box::new(x), Box::new(y)) }
             --
-            x:(@) _ "<" _  y:@ { Expr::Lt(Box::new(x), Box::new(y)) }
-            x:(@) _ ">" _  y:@ { Expr::Gt(Box::new(x), Box::new(y)) }
+            x:(@) _ "<" _  y:@ { Expr::Op(Op::Lt, Box::new(x), Box::new(y)) }
+            x:(@) _ ">" _  y:@ { Expr::Op(Op::Gt, Box::new(x), Box::new(y)) }
             --
             x:value_end() { x }
-            "!" _  x:operation() { Expr::Not(Box::new(x)) }
+            "!" _  x:operation() { Expr::Op(Op::Not, Box::new(x), Box::new(Expr::None)) }
         }
 
         rule value_end() -> Expr
@@ -164,7 +172,7 @@ peg::parser!(
             n:none() { Expr::None }
             n:number() { Expr::Number(n) }
             s:string() { Expr::String(s) }
-            n:symbol() { Expr::Symbol(n) }
+            n:symbol() { Expr::Identifier(n) }
         }
 
         rule value() -> Expr
@@ -179,7 +187,7 @@ peg::parser!(
             n:none() { Expr::None }
             n:number() { Expr::Number(n) }
             s:string() { Expr::String(s) }
-            n:symbol() { Expr::Symbol(n) }
+            n:symbol() { Expr::Identifier(n) }
         }
 
         rule expr() -> Expr
@@ -206,7 +214,7 @@ peg::parser!(
             n:none() { Expr::None }
             n:number() { Expr::Number(n) }
             s:string() { Expr::String(s) }
-            n:symbol() { Expr::Symbol(n) }
+            n:symbol() { Expr::Identifier(n) }
 
         }
 

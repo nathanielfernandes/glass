@@ -12,7 +12,7 @@ fn get_id(name: &str, state: &State, depth: usize, next: usize) -> usize {
 }
 
 pub fn add_std(ins: &mut Vec<Instr>, state: &mut State, depth: usize, next: &mut usize) {
-    macro_rules! op {
+    macro_rules! ins {
         ($op:expr) => {
             ins.push($op)
         };
@@ -63,10 +63,10 @@ pub fn add_std(ins: &mut Vec<Instr>, state: &mut State, depth: usize, next: &mut
     *next += 1;
     state.insert("print".to_string(), (id, depth));
 
-    op!(Instr::Jump(top + 4));
-    op!(Instr::Print);
+    ins!(Instr::Jump(top + 4));
+    ins!(Instr::Print);
     push_literal!(Type::None);
-    op!(Instr::Return);
+    ins!(Instr::Return);
     push_literal!(Type::FuncPtr(top + 1));
     store!(id, depth);
 }

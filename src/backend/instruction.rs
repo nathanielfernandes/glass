@@ -1,4 +1,4 @@
-use crate::frontend::{Expr, AST};
+use crate::frontend::{Expr, Op, AST};
 // use hashbrown::HashMap;
 use fxhash::FxHashMap;
 use std::fmt;
@@ -11,7 +11,6 @@ pub enum Type {
     String(String),
     Bool(bool),
     None,
-    Null,
 
     Addr(usize),
     FuncPtr(usize),
@@ -26,7 +25,6 @@ impl fmt::Debug for Type {
             Type::String(s) => write!(f, "str({})", s),
             Type::Bool(b) => write!(f, "bool({})", b),
             Type::None => write!(f, "none"),
-            Type::Null => write!(f, "null"),
             Type::Addr(addr) => write!(f, "#{}", addr),
             Type::FuncPtr(addr) => write!(f, "fn(@{})", addr),
             Type::Error(s) => write!(f, "Error({})", s),
@@ -125,7 +123,11 @@ impl Instr {
 
             if let Some(op) = ins.last() {
                 match expr {
-                    Expr::If(_, _, _) => {}
+                    Expr::If {
+                        condition: _,
+                        then: _,
+                        otherwise: _,
+                    } => {}
                     _ => {
                         if op.pushes_to_stack() {
                             ins.push(Instr::Pop);
@@ -143,7 +145,7 @@ impl Instr {
         depth: usize,
         next: &mut usize,
     ) {
-        macro_rules! op {
+        macro_rules! ins {
             ($op:expr) => {
                 ins.push($op)
             };
@@ -228,7 +230,7 @@ impl Instr {
                 // op!(Self::Store(id));
                 store!(id, dep);
             }
-            Expr::Symbol(name) => {
+            Expr::Identifier(name) => {
                 let (id, d) = state
                     .get(&name)
                     .expect(&format!("Variable not found {}", name))
@@ -238,7 +240,11 @@ impl Instr {
                 load!(id, d);
             }
 
-            Expr::Function(name, args, code) => {
+            Expr::Function {
+                name,
+                args,
+                body: code,
+            } => {
                 let top = ins.len();
                 ins.push(Instr::Noop); // placeholder for return address
 
@@ -270,7 +276,7 @@ impl Instr {
                 for arg in arg_ids {
                     // op!(Self::Store(arg));
                     // store!(arg, depth + 1);
-                    op!(Self::StoreLocal(arg));
+                    ins!(Self::StoreLocal(arg));
                 }
 
                 // for expr in code {
@@ -279,7 +285,7 @@ impl Instr {
                 Self::iter_build(ins, code, &mut fn_state, depth + 1, next);
 
                 push_literal!(Type::None);
-                op!(Self::Return);
+                ins!(Self::Return);
 
                 ins[top] = Self::Jump(ins.len());
 
@@ -289,7 +295,11 @@ impl Instr {
 
                 // op!(Self::Register(id, top + 1));
             }
-            Expr::If(condition, then, otherwise) => {
+            Expr::If {
+                condition,
+                then,
+                otherwise,
+            } => {
                 match *condition {
                     Expr::Bool(true) => {
                         // for expr in then {
@@ -303,7 +313,7 @@ impl Instr {
                         // }
                         Self::iter_build(ins, otherwise, state, depth, next);
                     }
-                    Expr::Or(lhs, rhs) => {
+                    Expr::Op(Op::Or, lhs, rhs) => {
                         Self::build(ins, *lhs, state, depth, next);
                         let jump_if_idx = ins.len();
                         ins.push(Self::Noop);
@@ -331,7 +341,7 @@ impl Instr {
                         ins[jump_if_not_idx] = Self::JumpIfNot(jump_to);
                         ins[jump_idx] = Self::Jump(ins.len());
                     }
-                    Expr::And(lhs, rhs) => {
+                    Expr::Op(Op::And, lhs, rhs) => {
                         Self::build(ins, *lhs, state, depth, next);
                         let jump_if_idx = ins.len();
                         ins.push(Self::Noop);
@@ -392,95 +402,39 @@ impl Instr {
                 }
 
                 if dep != 0 && dep < depth {
-                    op!(Self::LoadName(id))
+                    ins!(Self::LoadName(id))
                 } else {
                     load!(id, dep);
                 }
-                op!(Self::Call);
+                ins!(Self::Call);
             }
             Expr::Return(expr) => {
                 // build!(*expr);
 
                 Self::build(ins, *expr, state, depth, next);
-                op!(Self::Return);
+                ins!(Self::Return);
             }
-            Expr::Add(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Add);
-            }
-            Expr::Sub(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Sub);
-            }
-            Expr::Mul(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Mul);
-            }
-            Expr::Div(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Div);
-            }
-            Expr::Mod(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Mod);
-            }
-            Expr::Pow(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Pow);
-            }
-            Expr::Eq(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Eq);
-            }
-            Expr::Neq(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Neq);
-            }
-            Expr::Lt(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Lt);
-            }
-            Expr::Gt(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Gt);
-            }
-            Expr::Lte(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Lte);
-            }
-            Expr::Gte(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Gte);
-            }
-            Expr::And(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::And);
-            }
-            Expr::Or(lhs, rhs) => {
-                build!(*lhs);
-                build!(*rhs);
-                op!(Instr::Or);
-            }
-            Expr::Not(expr) => {
-                build!(*expr);
-                op!(Instr::Not);
-            }
-            Expr::Neg(expr) => {
-                build!(*expr);
-                op!(Instr::Neg);
+            Expr::Op(op, lhs, rhs) => {
+                Self::build(ins, *lhs, state, depth, next);
+                Self::build(ins, *rhs, state, depth, next);
+                match op {
+                    Op::Add => ins!(Self::Add),
+                    Op::Sub => ins!(Self::Sub),
+                    Op::Mul => ins!(Self::Mul),
+                    Op::Div => ins!(Self::Div),
+                    Op::Mod => ins!(Self::Mod),
+                    Op::Eq => ins!(Self::Eq),
+                    Op::Neq => ins!(Self::Neq),
+                    Op::Lt => ins!(Self::Lt),
+                    Op::Gt => ins!(Self::Gt),
+                    Op::Lte => ins!(Self::Lte),
+                    Op::Gte => ins!(Self::Gte),
+                    Op::Or => ins!(Self::Or),
+                    Op::And => ins!(Self::And),
+                    Op::Not => ins!(Self::Not),
+                    Op::Neg => ins!(Self::Neg),
+                    Op::Pow => ins!(Self::Pow),
+                }
             }
             _ => {
                 panic!("Not implemented");
@@ -526,31 +480,31 @@ impl fmt::Debug for Instr {
             Self::Register(id, addr) => write!(f, "Register\t{} {addr}", id),
 
             Self::Push(arg) => write!(f, "Push    \t{:?}", arg),
-            Self::Pop => write!(f, "Pop"),
+            Self::Pop => write!(f, "Pop           "),
             Self::Jump(id) => write!(f, "Jump    \t{}", id),
             Self::JumpIf(id) => write!(f, "JumpIf  \t{}", id),
             Self::JumpIfNot(id) => write!(f, "JumpIfNot\t{}", id),
-            Self::Call => write!(f, "Call"),
-            Self::Return => write!(f, "Return"),
+            Self::Call => write!(f, "Call              "),
+            Self::Return => write!(f, "Return           "),
 
-            Self::Print => write!(f, "Print"),
+            Self::Print => write!(f, "Print           "),
 
-            Self::Add => write!(f, "Add"),
-            Self::Sub => write!(f, "Sub"),
-            Self::Mul => write!(f, "Mul"),
-            Self::Div => write!(f, "Div"),
-            Self::Mod => write!(f, "Mod"),
-            Self::Pow => write!(f, "Pow"),
-            Self::Eq => write!(f, "Eq"),
-            Self::Neq => write!(f, "Neq"),
-            Self::Lt => write!(f, "Lt"),
-            Self::Gt => write!(f, "Gt"),
-            Self::Lte => write!(f, "Lte"),
-            Self::Gte => write!(f, "Gte"),
-            Self::And => write!(f, "And"),
-            Self::Or => write!(f, "Or"),
-            Self::Not => write!(f, "Not"),
-            Self::Neg => write!(f, "Neg"),
+            Self::Add => write!(f, "Add              "),
+            Self::Sub => write!(f, "Sub              "),
+            Self::Mul => write!(f, "Mul              "),
+            Self::Div => write!(f, "Div              "),
+            Self::Mod => write!(f, "Mod              "),
+            Self::Pow => write!(f, "Pow              "),
+            Self::Eq => write!(f, "Eq              "),
+            Self::Neq => write!(f, "Neq              "),
+            Self::Lt => write!(f, "Lt              "),
+            Self::Gt => write!(f, "Gt              "),
+            Self::Lte => write!(f, "Lte              "),
+            Self::Gte => write!(f, "Gte              "),
+            Self::And => write!(f, "And              "),
+            Self::Or => write!(f, "Or              "),
+            Self::Not => write!(f, "Not              "),
+            Self::Neg => write!(f, "Neg              "),
         }
     }
 }

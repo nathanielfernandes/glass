@@ -1,4 +1,7 @@
-use std::{thread, time, usize};
+use std::{
+    io::{stdout, Write},
+    thread, time, usize,
+};
 
 use super::{
     instruction::{Instr, Type},
@@ -38,6 +41,27 @@ impl VM {
         }
     }
 
+    pub fn debug(&mut self) {
+        let delay = time::Duration::from_millis(20);
+
+        while self.pc < self.program.len() {
+            let ins = self.program[self.pc].clone();
+
+            if ins != Instr::Noop {
+                let i = self.pc;
+                let top = self.peek_stack();
+                if let Some(top) = top {
+                    println!("{}:\t{:?}\t <- {:?}", i, ins, top);
+                } else {
+                    println!("{}:\t{:?}", i, ins);
+                }
+                thread::sleep(delay);
+            }
+
+            self.step();
+        }
+    }
+
     pub fn all_scopes_get(&self, id: id) -> Option<usize> {
         for scope in self.scopes.iter().rev() {
             if let Some(addr) = scope.get(id) {
@@ -60,14 +84,23 @@ impl VM {
         None
     }
 
+    pub fn peek_stack(&mut self) -> Option<&Type> {
+        if let Some(value) = self.stack.peek() {
+            return Some(match value {
+                StackValue::Literal(value) => value,
+                StackValue::Addr(addr) => self.heap.get(*addr),
+            });
+        }
+
+        None
+    }
+
     pub fn pop_stack(&mut self) -> Type {
         let value = self.stack.pop();
 
         match value {
             StackValue::Literal(value) => value,
             StackValue::Addr(addr) => self.heap.get(addr).to_owned(),
-            // StackValue::Ref(addr) => ,
-            // StackValue::Offset(offset) => self.get_mem_offset(offset),
         }
     }
 
@@ -94,21 +127,13 @@ impl VM {
         let instruction = &self.program[self.pc];
         self.pc += 1;
 
-        // let ten_millis = time::Duration::from_millis(200);
-        // thread::sleep(ten_millis);
-
-        // if instruction != &Opcode::Noop {
-        //     // println!("{:?}", self.stack.internal);
-        //     println!("{:?}", instruction);
-        // }
-
         match instruction {
             Instr::Halt => {
                 println!("Halt");
                 return;
             }
             Instr::Push(value) => {
-                self.stack.push(value.to_owned());
+                self.stack.push(value.clone());
             }
             Instr::Pop => {
                 self.stack.pop();
