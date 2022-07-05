@@ -1,35 +1,41 @@
 ln#	opcode    	id/value
 -------------------------
-0:	Jump    	27
-1:	StoreLocal	2
-2:	LoadLocal	2
-3:	Push    	num(0)
-4:	Eq
-5:	JumpIf  	10
-6:	LoadLocal	2
-7:	Push    	num(1)
-8:	Eq
-9:	JumpIfNot	13
-10:	LoadLocal	2
-11:	Return
-12:	Jump    	25
-13:	LoadLocal	2
-14:	Push    	num(1)
-15:	Sub
-16:	LoadGlobal	0
-17:	Call
-18:	LoadLocal	2
-19:	Push    	num(2)
-20:	Sub
-21:	LoadGlobal	0
-22:	Call
-23:	Add
-24:	Return
-25:	Push    	none
-26:	Return
-27:	Push    	fn(@1)
-28:	StoreGlobal	0
-29:	Push    	num(30)
-30:	LoadGlobal	0
-31:	Call
+0:	Jump    	4
+1:	Print
+2:	Push    	none
+3:	Return
+4:	Push    	fn(@1)
+5:	StoreGlobal	0
+6:	Jump    	33
+7:	StoreLocal	3
+8:	LoadLocal	3
+9:	Push    	num(0)
+10:	Eq
+11:	JumpIf  	16
+12:	LoadLocal	3
+13:	Push    	num(1)
+14:	Eq
+15:	JumpIfNot	19
+16:	LoadLocal	3
+17:	Return
+18:	Jump    	31
+19:	LoadLocal	3
+20:	Push    	num(1)
+21:	Sub
+22:	LoadGlobal	1
+23:	Call
+24:	LoadLocal	3
+25:	Push    	num(2)
+26:	Sub
+27:	LoadGlobal	1
+28:	Call
+29:	Add
+30:	Return
+31:	Push    	none
+32:	Return
+33:	Push    	fn(@7)
+34:	StoreGlobal	1
+35:	Push    	num(30)
+36:	LoadGlobal	1
+37:	Call
 -------------------------

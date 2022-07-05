@@ -287,11 +287,11 @@ impl VM {
                 let rhs = self.pop_stack();
                 let lhs = self.pop_stack();
 
-                let result = match (lhs, rhs) {
+                let result = match (&lhs, &rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs == rhs),
                     (Type::String(lhs), Type::String(rhs)) => Type::Bool(lhs == rhs),
                     (Type::Bool(lhs), Type::Bool(rhs)) => Type::Bool(lhs == rhs),
-                    _ => panic!("Equality not supported"),
+                    _ => Type::Bool(lhs == rhs),
                 };
 
                 self.stack.push(StackValue::Literal(result));
@@ -406,10 +406,12 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Opcode::Print => {
-                let value = self.pop_stack();
-                println!("PRINT: {:?}", value);
-            }
+            Opcode::Print => match self.pop_stack() {
+                Type::String(value) => println!("{}", value),
+                Type::Number(value) => println!("{}", value),
+                Type::Bool(value) => println!("{}", value),
+                _ => panic!("Print not supported"),
+            },
             Opcode::Noop => {}
             _ => {
                 println!("NOT HANDLED: {:?}", instruction);

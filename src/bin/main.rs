@@ -21,7 +21,6 @@ fn main() {
     let code = read_to_string(path::Path::new("src/bin/test.rv")).unwrap();
 
     let ast = parser::parse_code(&code).unwrap();
-    // println!("{:?}", ast);
 
     let program = Opcode::compile(ast);
 
@@ -34,5 +33,5 @@ fn main() {
     vm.run();
     println!("Took {:?}ms", s.elapsed().as_millis());
 
-    println!("{:?}", vm.heap.internal);
+    // println!("{:?}", vm.heap.internal);
 }

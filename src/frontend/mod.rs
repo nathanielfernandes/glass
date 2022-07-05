@@ -88,10 +88,10 @@ peg::parser!(
         = _ "return" e:(__ e:expr() _ { e } / _ { Expr::None }) {Expr::Return(Box::new(e))}
 
         rule declaration() -> Expr
-        = _ "let" __ name:symbol() _ value:(("=" _ value:expr() _ { value }) / { Expr::None }) { Expr::Declaration(name, Box::new(value)) }
+        = _ "let" __ name:symbol() _ value:(("=" _ value:value() _ { value }) / { Expr::None }) { Expr::Declaration(name, Box::new(value)) }
 
         rule assignment() -> Expr
-        = _ name:symbol() _ "=" _ value:expr() _ { Expr::Assignment(name, Box::new(value)) };
+        = _ name:symbol() _ "=" _ value:value() _ { Expr::Assignment(name, Box::new(value)) };
 
         rule block() -> Vec<Expr>
         = _ "{" _ e:(parse()*) _ "}" _ { e }
@@ -103,11 +103,14 @@ peg::parser!(
         rule else_elif() -> Vec<Expr>
         = "else" _ res:(_else() / _elif()) {res}
         rule if_condition() -> Expr
-        = _ "if" _ "(" _ condition:operation() _ ")"  _ then:block() _ otherwise:(else_elif())? _ {
+        = _ "if" _ condition:operation() _ then:block() _ otherwise:(else_elif())? _ {
             Expr::If(Box::new(condition), then, otherwise.unwrap_or(vec![]))
         }
 
-        #[cache_left_rec]
+
+
+
+
         rule arithmetic() -> Expr
         = precedence! {
             _ "(" _ x:arithmetic() _ ")" _ { x }
@@ -130,11 +133,10 @@ peg::parser!(
             --
             x:(@) _ "**" _  y:@ { Expr::Pow(Box::new(x), Box::new(y)) }
             --
-            x:value() { x }
+            x:value_end() { x }
             "-" _ e:arithmetic() { Expr::Neg(Box::new(e)) }
         }
 
-        #[cache_left_rec]
         rule operation() -> Expr
         = precedence! {
             "(" _ x:operation() _ ")" _ { x }
@@ -151,19 +153,28 @@ peg::parser!(
             x:(@) _ "<" _  y:@ { Expr::Lt(Box::new(x), Box::new(y)) }
             x:(@) _ ">" _  y:@ { Expr::Gt(Box::new(x), Box::new(y)) }
             --
-            x:value() { x }
+            x:value_end() { x }
             "!" _  x:operation() { Expr::Not(Box::new(x)) }
         }
 
-        #[cache_left_rec]
+        rule value_end() -> Expr
+        = precedence!{
+            c:call() { c }
+            --
+            n:bool() { Expr::Bool(n) }
+            n:none() { Expr::None }
+            n:number() { Expr::Number(n) }
+            s:string() { Expr::String(s) }
+            n:symbol() { Expr::Symbol(n) }
+        }
+
         rule value() -> Expr
         = precedence!{
             n:arithmetic() { n }
             n:operation() { n }
-            n:lambda() { n }
-            c:call() { c }
+            // n:lambda() { n }
             --
-            n:if_condition() { n }
+            c:call() { c }
             --
             n:bool() { Expr::Bool(n) }
             n:none() { Expr::None }
@@ -182,7 +193,7 @@ peg::parser!(
             --
             n:assignment() { n }
             --
-            n:lambda() { n }
+            // n:lambda() { n }
             n:function() { n }
             --
             n:if_condition() { n }

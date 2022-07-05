@@ -3,7 +3,12 @@ use crate::frontend::{Expr, AST};
 use fxhash::FxHashMap;
 use std::fmt;
 
-use super::{memory::addr, scope::id, stack::StackValue};
+use super::{
+    memory::addr,
+    scope::id,
+    stack::StackValue,
+    stdlib::{self, add_std},
+};
 
 #[derive(Clone, PartialEq)]
 pub enum Type {
@@ -88,22 +93,8 @@ impl Opcode {
         let mut state = FxHashMap::default();
         let mut next = 0;
 
+        add_std(&mut program, &mut state, 0, &mut next);
         Self::iter_build(&mut program, ast, &mut state, 0, &mut next);
-
-        // for expr in ast {
-        //     Opcode::build(&mut program, expr.clone(), &mut state, 0, &mut next);
-
-        //     if let Some(op) = program.last() {
-        //         match expr {
-        //             Expr::If(_, _, _) => {}
-        //             _ => {
-        //                 if op.pushes_to_stack() {
-        //                     program.push(Opcode::Pop);
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
 
         let mut last = None;
         for (i, op) in program.clone().into_iter().enumerate() {
