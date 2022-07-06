@@ -40,44 +40,47 @@ pub type addr = usize;
 //     }
 // }
 
-pub struct Memory {
-    pub internal: Vec<Type>,
-    pub next_addr: usize,
-}
+pub struct Memory(
+    pub Vec<Type>,
+    // pub next_addr: usize,
+);
 
 impl Memory {
     pub fn new() -> Memory {
-        Memory {
+        Memory(
             // internal: Vec::with_capacity(u16::MAX as usize),
-            internal: Vec::new(),
-            next_addr: 0,
-        }
+            Vec::new(),
+            // next_addr: 0,
+        )
     }
 
-    pub fn push(&mut self, value: Type) {
-        self.internal.push(value);
-        self.next_addr += 1;
-    }
+    // pub fn push(&mut self, value: Type) {
+    //     self.0.push(value);
+    //     // self.next_addr += 1;
+    // }
 
     pub fn add(&mut self, value: Type) -> usize {
-        self.push(value);
-        self.next_addr - 1
+        let next_addr = self.0.len();
+        self.0.push(value);
+
+        // self.next_addr - 1
+        next_addr
     }
 
     pub fn get(&self, index: usize) -> &Type {
-        &self.internal[index]
+        &self.0[index]
     }
 
-    pub fn pop(&mut self, index: usize) -> Type {
-        self.internal.remove(index)
-    }
+    // pub fn pop(&mut self, index: usize) -> Type {
+    //     self.internal.remove(index)
+    // }
 
     pub fn set(&mut self, index: usize, value: Type) {
-        if index >= self.internal.len() {
-            self.internal.resize(index + 1, Type::Null);
+        if index >= self.0.len() {
+            self.0.resize(index + 1, Type::Null);
         }
 
-        self.internal[index] = value;
+        self.0[index] = value;
     }
 
     // pub fn delete(&mut self, index: usize) {
@@ -86,7 +89,7 @@ impl Memory {
     //     self.next_addr -= 1;
     // }
 
-    pub fn free(&mut self, amnt: usize) {
-        self.next_addr -= amnt;
-    }
+    // pub fn free(&mut self, amnt: usize) {
+    //     self.next_addr -= amnt;
+    // }
 }

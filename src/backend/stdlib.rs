@@ -38,7 +38,7 @@ pub fn add_std(ins: &mut Vec<Instr>, state: &mut State, depth: usize, next: &mut
             } else if $d == depth {
                 ins.push(Instr::LoadLocal($id))
             } else {
-                ins.push(Instr::Load($id))
+                ins.push(Instr::LoadAddr($id + $d))
             }
         };
     }
@@ -51,7 +51,7 @@ pub fn add_std(ins: &mut Vec<Instr>, state: &mut State, depth: usize, next: &mut
             } else if $d == depth {
                 ins.push(Instr::StoreLocal($id))
             } else {
-                ins.push(Instr::Store($id))
+                ins.push(Instr::StoreAddr($id + $d))
             }
         };
     }

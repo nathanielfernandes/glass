@@ -44,13 +44,14 @@ pub enum Instr {
 
     Halt,
 
-    Load(offset),
-    LoadDeref(offset),
+    // Load(offset),
+    // LoadDeref(offset),
     LoadAddr(offset),
     LoadLocal(offset),
     LoadGlobal(offset),
 
-    Store(offset),
+    // Store(offset),
+    StoreAddr(offset),
     StoreLocal(offset),
     StoreGlobal(offset),
 
@@ -96,36 +97,36 @@ impl Instr {
         add_std(&mut program, &mut state, 0, &mut next);
         Self::iter_build(&mut program, ast, &mut state, 0, &mut next);
 
-        // let mut last = None;
-        // for (i, op) in program.clone().into_iter().enumerate() {
-        //     if let Some(l) = last.clone() {
-        //         match (l, op.clone()) {
-        //             (Instr::Push(_), Instr::Pop) => {
-        //                 program[i - 1] = Instr::Noop;
-        //                 program[i] = Instr::Noop;
-        //             }
-        //             (Instr::LoadDeref(_), Instr::Pop) => {
-        //                 program[i - 1] = Instr::Noop;
-        //                 program[i] = Instr::Noop;
-        //             }
-        //             (Instr::LoadAddr(_), Instr::Pop) => {
-        //                 program[i - 1] = Instr::Noop;
-        //                 program[i] = Instr::Noop;
-        //             }
-        //             (Instr::LoadLocal(_), Instr::Pop) => {
-        //                 program[i - 1] = Instr::Noop;
-        //                 program[i] = Instr::Noop;
-        //             }
-        //             (Instr::LoadGlobal(_), Instr::Pop) => {
-        //                 program[i - 1] = Instr::Noop;
-        //                 program[i] = Instr::Noop;
-        //             }
-        //             _ => {}
-        //         }
-        //     }
+        let mut last = None;
+        for (i, op) in program.clone().into_iter().enumerate() {
+            if let Some(l) = last.clone() {
+                match (l, op.clone()) {
+                    (Instr::Push(_), Instr::Pop) => {
+                        program[i - 1] = Instr::Noop;
+                        program[i] = Instr::Noop;
+                    }
+                    // (Instr::LoadDeref(_), Instr::Pop) => {
+                    //     program[i - 1] = Instr::Noop;
+                    //     program[i] = Instr::Noop;
+                    // }
+                    (Instr::LoadAddr(_), Instr::Pop) => {
+                        program[i - 1] = Instr::Noop;
+                        program[i] = Instr::Noop;
+                    }
+                    (Instr::LoadLocal(_), Instr::Pop) => {
+                        program[i - 1] = Instr::Noop;
+                        program[i] = Instr::Noop;
+                    }
+                    (Instr::LoadGlobal(_), Instr::Pop) => {
+                        program[i - 1] = Instr::Noop;
+                        program[i] = Instr::Noop;
+                    }
+                    _ => {}
+                }
+            }
 
-        //     last = Some(op);
-        // }
+            last = Some(op);
+        }
 
         program
     }
@@ -202,7 +203,7 @@ impl Instr {
                 } else if $d == depth {
                     ins.push(Self::StoreLocal($id))
                 } else {
-                    ins.push(Self::Store($id))
+                    ins.push(Self::StoreAddr($id + $d))
                 }
             };
         }
@@ -493,7 +494,8 @@ impl Instr {
             Self::Jump(_) => false,
             Self::Pop => false,
             Self::Print => false,
-            Self::Store(_) => false,
+            // Self::Store(_) => false,
+            Self::StoreAddr(_) => false,
             Self::StoreGlobal(_) => false,
             Self::StoreLocal(_) => false,
             Self::Register(_, _) => false,
@@ -514,13 +516,14 @@ impl fmt::Debug for Instr {
             Self::Noop => write!(f, "Noop"),
             Self::Halt => write!(f, "Halt"),
 
-            Self::Load(id) => write!(f, "Load       \t{}", id),
+            // Self::Load(id) => write!(f, "Load       \t{}", id),
+            // Self::LoadDeref(id) => write!(f, "LoadDeref\t{}", id),
             Self::LoadAddr(id) => write!(f, "LoadAddr   \t{}", id),
-            Self::LoadDeref(id) => write!(f, "LoadDeref\t{}", id),
             Self::LoadLocal(id) => write!(f, "LoadLocal\t{}", id),
             Self::LoadGlobal(id) => write!(f, "LoadGlobal\t{}", id),
 
-            Self::Store(id) => write!(f, "Store    \t{}", id),
+            // Self::Store(id) => write!(f, "Store    \t{}", id),
+            Self::StoreAddr(id) => write!(f, "StoreAddr   \t{}", id),
             Self::StoreLocal(id) => write!(f, "StoreLocal\t{}", id),
             Self::StoreGlobal(id) => write!(f, "StoreGlobal\t{}", id),
 

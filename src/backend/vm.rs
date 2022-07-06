@@ -6,6 +6,9 @@ use super::{
     stack::{Stack, StackValue},
 };
 
+const FALSE: Type = Type::Bool(false);
+const TRUE: Type = Type::Bool(true);
+
 pub struct VM {
     pub program: Vec<Instr>,
     pub pc: usize,
@@ -27,7 +30,11 @@ impl VM {
             stack: Stack::new(),
             heap: Memory::new(),
 
-            call_stack: vec![0],
+            call_stack: {
+                let mut cs = Vec::with_capacity(1000);
+                cs.push(0);
+                cs
+            },
             fp: 0,
         }
     }
@@ -59,28 +66,6 @@ impl VM {
         }
     }
 
-    // pub fn all_scopes_get(&self, id: id) -> Option<usize> {
-    //     for scope in self.scopes.iter().rev() {
-    //         if let Some(addr) = scope.get(id) {
-    //             return Some(addr);
-    //         }
-    //     }
-
-    //     None
-    // }
-
-    // pub fn all_scopes_get_desc(&self, id: id) -> Option<usize> {
-    //     let mut n = 0;
-    //     for scope in self.scopes.iter().rev() {
-    //         if let Some(addr) = scope.get(id - n) {
-    //             return Some(addr);
-    //         }
-    //         n += 1;
-    //     }
-
-    //     None
-    // }
-
     pub fn peek_stack(&mut self) -> Option<&Type> {
         if let Some(value) = self.stack.peek() {
             return Some(match value {
@@ -92,10 +77,9 @@ impl VM {
         None
     }
 
+    #[inline]
     pub fn pop_stack<'a>(&'a mut self) -> Cow<'a, Type> {
-        let value = self.stack.pop();
-
-        match value {
+        match self.stack.pop() {
             StackValue::Literal(value) => Cow::Owned(value),
             StackValue::Addr(addr) => {
                 let val = self.heap.get(addr);
@@ -104,16 +88,14 @@ impl VM {
         }
     }
 
+    #[inline]
     pub fn double_pop_stack<'a>(&'a mut self) -> (Cow<'a, Type>, Cow<'a, Type>) {
-        let value1 = self.stack.pop();
-        let value2 = self.stack.pop();
-
         (
-            match value1 {
+            match self.stack.pop() {
                 StackValue::Literal(value) => Cow::Owned(value),
                 StackValue::Addr(addr) => Cow::Borrowed(self.heap.get(addr)),
             },
-            match value2 {
+            match self.stack.pop() {
                 StackValue::Literal(value) => Cow::Owned(value),
                 StackValue::Addr(addr) => Cow::Borrowed(self.heap.get(addr)),
             },
@@ -127,12 +109,18 @@ impl VM {
     //     }
     // }
 
+    #[inline]
     pub fn enter_scope(&mut self, return_to: usize) {
         // self.scopes.push(Scope::new(return_to));
         self.call_stack.push(return_to);
         self.fp += 1;
+
+        // if self.fp > 1000 {
+        //     panic!("Stack overflow");
+        // }
     }
 
+    #[inline]
     pub fn exit_scope(&mut self) -> usize {
         // let scope = self.scopes.pop().expect("Exited from empty scope");
         let return_to = self.call_stack.pop().expect("Exited from empty scope");
@@ -141,6 +129,7 @@ impl VM {
         return_to
     }
 
+    #[inline]
     pub fn step(&mut self) {
         let instruction = &self.program[self.pc];
         self.pc += 1;
@@ -157,10 +146,14 @@ impl VM {
                 self.stack.pop();
             }
 
+            Instr::StoreAddr(addr) => {
+                let addr = *addr;
+                let value = self.pop_stack().into_owned();
+                self.heap.set(addr, value);
+            }
             Instr::StoreLocal(offset) => {
                 let addr = *offset + self.fp;
                 let value = self.pop_stack().into_owned();
-
                 self.heap.set(addr, value);
             }
             Instr::StoreGlobal(offset) => {
@@ -170,18 +163,16 @@ impl VM {
                 self.heap.set(addr, value);
             }
 
-            // Instr::Load(offset) => {
+            // Instr::LoadDeref(offset) => {
             //     let addr = *offset + self.fp;
             //     let value = self.heap.get(addr);
             //     self.stack.push(StackValue::Literal(value.clone()));
             // }
-            Instr::LoadAddr(offset) => {
-                let addr = *offset;
-                self.stack.push(StackValue::Addr(addr));
+            Instr::LoadAddr(addr) => {
+                self.stack.push(StackValue::Addr(*addr));
             }
             Instr::LoadLocal(offset) => {
-                let addr = *offset + self.fp;
-                self.stack.push(StackValue::Addr(addr));
+                self.stack.push(StackValue::Addr(*offset + self.fp));
             }
             Instr::LoadGlobal(offset) => {
                 self.stack.push(StackValue::Addr(*offset));
@@ -191,8 +182,6 @@ impl VM {
                 self.pc = *to;
             }
             Instr::JumpIf(to) => {
-                const TRUE: Type = Type::Bool(true);
-
                 let to = *to;
                 let c_val = self.pop_stack();
                 let value = c_val.as_ref();
@@ -202,8 +191,6 @@ impl VM {
                 }
             }
             Instr::JumpIfNot(to) => {
-                const FALSE: Type = Type::Bool(false);
-
                 let to = *to;
                 let c_val = self.pop_stack();
                 let value = c_val.as_ref();
