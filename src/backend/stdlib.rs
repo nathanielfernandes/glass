@@ -64,6 +64,8 @@ pub fn add_std(ins: &mut Vec<Instr>, state: &mut State, depth: usize, next: &mut
     state.insert("print".to_string(), (id, depth));
 
     ins!(Instr::Jump(top + 4));
+    // ins!(Instr::StoreLocal(1));
+    // ins!(Instr::LoadLocal(1));
     ins!(Instr::Print);
     push_literal!(Type::None);
     ins!(Instr::Return);

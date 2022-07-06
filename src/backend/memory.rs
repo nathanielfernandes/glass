@@ -89,7 +89,7 @@ impl Memory {
     //     self.next_addr -= 1;
     // }
 
-    // pub fn free(&mut self, amnt: usize) {
-    //     self.next_addr -= amnt;
-    // }
+    pub fn free(&mut self, addr: usize) {
+        self.0[addr] = Type::Null;
+    }
 }

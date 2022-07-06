@@ -55,8 +55,7 @@ pub enum Instr {
     StoreLocal(offset),
     StoreGlobal(offset),
 
-    Register(offset, addr),
-
+    // Register(offset, addr),
     Push(StackValue),
     Pop,
 
@@ -196,8 +195,24 @@ impl Instr {
             };
         }
 
-        macro_rules! store {
+        macro_rules! declare {
             ($id:expr, $d:expr) => {
+                if $d == 0 {
+                    ins.push(Self::StoreGlobal($id))
+                } else if $d == depth {
+                    ins.push(Self::StoreLocal($id))
+                } else {
+                    ins.push(Self::StoreAddr($id + $d))
+                }
+            };
+        }
+
+        macro_rules! assign {
+            ($id:expr, $d:expr) => {
+                // if $d < depth {
+                //     return;
+                // }
+
                 if $d == 0 {
                     ins.push(Self::StoreGlobal($id))
                 } else if $d == depth {
@@ -225,16 +240,25 @@ impl Instr {
                 build!(*value);
                 // Self::build(ins, *value, state, depth + 1, next, stack);
                 // let id = get_id(&name) + depth;
+
                 if let Some((id, dep)) = state.get(&name) {
-                    // op!(Self::Store(*id));
-                    store!(*id, *dep);
+                    if *dep == depth {
+                        declare!(*id, *dep);
+                    } else {
+                        let id = depth + *next;
+
+                        *next += 1;
+                        state.insert(name, (id.clone(), depth));
+                        // op!(Self::Store(id));
+                        declare!(id, depth);
+                    }
                 } else {
                     let id = depth + *next;
 
                     *next += 1;
                     state.insert(name, (id.clone(), depth));
                     // op!(Self::Store(id));
-                    store!(id, depth);
+                    declare!(id, depth);
                 }
             }
             Expr::Assignment(name, value) => {
@@ -247,8 +271,24 @@ impl Instr {
                 build!(*value);
                 // Self::build(ins, *value, state, depth + 1, next, stack);
                 // op!(Self::Store(id));
-                store!(id, dep);
+                assign!(id, dep);
             }
+            // Expr::Walrus(name, value) => {
+            //     build!(*value);
+            //     // Self::build(ins, *value, state, depth + 1, next, stack);
+            //     // let id = get_id(&name) + depth;
+            //     if let Some((id, dep)) = state.get(&name) {
+            //         // op!(Self::Store(*id));
+            //         store!(*id, *dep);
+            //     } else {
+            //         let id = depth + *next;
+
+            //         *next += 1;
+            //         state.insert(name, (id.clone(), depth));
+            //         // op!(Self::Store(id));
+            //         store!(id, depth);
+            //     }
+            // }
             Expr::Identifier(name) => {
                 let (id, dep) = state
                     .get(&name)
@@ -280,9 +320,13 @@ impl Instr {
                 ins.push(Instr::Noop); // placeholder for return address
 
                 // let depth = depth + 1;
-
-                let id: usize = if let Some((id, _)) = state.get(&name) {
+                let mut new_next = *next;
+                let id: usize = if let Some((id, _dep)) = state.get(&name) {
+                    // if depth == *dep {
                     *id
+                    // } else {
+                    //     depth + *next
+                    // }
                 } else {
                     depth + *next
                 };
@@ -298,9 +342,9 @@ impl Instr {
 
                 // let mut arg_ids = vec![];
                 for arg in args {
-                    let id = depth + 1 + *next;
+                    let id = depth + 1 + new_next;
                     // let id = get_id(&arg) + depth;
-                    *next += 1;
+                    new_next += 1;
                     fn_state.insert(arg, (id.clone(), depth + 1));
 
                     // arg_ids.push(id);
@@ -319,7 +363,7 @@ impl Instr {
                 // for expr in code {
                 //     Self::build(ins, expr, &mut fn_state, depth, next);
                 // }
-                Self::iter_build(ins, code, &mut fn_state, depth + 1, next);
+                Self::iter_build(ins, code, &mut fn_state, depth + 1, &mut new_next);
 
                 push_literal!(Type::None);
                 ins!(Self::Return);
@@ -328,7 +372,7 @@ impl Instr {
 
                 push_literal!(Type::FuncPtr(top + 1));
                 // op!(Self::Store(id));
-                store!(id, depth);
+                declare!(id, depth);
 
                 // op!(Self::Register(id, top + 1));
             }
@@ -498,7 +542,7 @@ impl Instr {
             Self::StoreAddr(_) => false,
             Self::StoreGlobal(_) => false,
             Self::StoreLocal(_) => false,
-            Self::Register(_, _) => false,
+            // Self::Register(_, _) => false,
             // Self::Call => false,
             Self::Return => false,
             Self::JumpIfNot(_) => false,
@@ -527,8 +571,7 @@ impl fmt::Debug for Instr {
             Self::StoreLocal(id) => write!(f, "StoreLocal\t{}", id),
             Self::StoreGlobal(id) => write!(f, "StoreGlobal\t{}", id),
 
-            Self::Register(id, addr) => write!(f, "Register\t{} {addr}", id),
-
+            // Self::Register(id, addr) => write!(f, "Register\t{} {addr}", id),
             Self::Push(arg) => write!(f, "Push    \t{:?}", arg),
             Self::Pop => write!(f, "Pop           "),
             Self::Jump(id) => write!(f, "Jump    \t{}", id),

@@ -10,7 +10,7 @@ pub enum Expr {
 
     Declaration(String, Box<Expr>),
     Assignment(String, Box<Expr>),
-
+    // Walrus(String, Box<Expr>),
     Function {
         name: String,
         args: Vec<String>,
@@ -103,6 +103,9 @@ peg::parser!(
 
         rule assignment() -> Expr
         = _ name:symbol() _ "=" _ value:value() _ { Expr::Assignment(name, Box::new(value)) };
+
+        // rule assignment_expression() -> Expr
+        // = _ name:symbol() _ ":=" _ value:value() _ { Expr::Walrus(name, Box::new(value)) };
 
         rule block() -> Vec<Expr>
         = _ "{" _ e:(parse()*) _ "}" _ { e }

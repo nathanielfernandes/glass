@@ -18,6 +18,8 @@ fn write_program(program: &Vec<Instr>, path: &path::Path) {
 }
 
 fn main() {
+    let s = std::time::Instant::now();
+
     let code = read_to_string(path::Path::new("src/bin/test.rv")).unwrap();
 
     let ast = parser::parse_code(&code).unwrap();
@@ -29,11 +31,12 @@ fn main() {
     let mut vm = VM::new();
     vm.program = program;
 
-    let s = std::time::Instant::now();
+    println!("Took {:?}micros", s.elapsed().as_micros());
+
     vm.run();
     // vm.debug();
     println!("Took {:?}ms", s.elapsed().as_millis());
 
-    // println!("{:?}", vm.heap.internal);
+    // println!("{:?}", vm.heap.0);
     // println!("{:?}", vm.scopes[0].0);
 }
