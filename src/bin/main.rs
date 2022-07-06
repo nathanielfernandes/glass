@@ -9,7 +9,7 @@ use glass::frontend::parser;
 
 fn write_program(program: &Vec<Instr>, path: &path::Path) {
     let mut file = File::create(path).unwrap();
-    write!(file, "ln#\topcode    \tid/value\n").unwrap();
+    write!(file, "ln#\topcode    \toffset/value\n").unwrap();
     write!(file, "-------------------------\n").unwrap();
     for (i, instruction) in program.iter().enumerate() {
         write!(file, "{}:\t{:?}\n", i, instruction).unwrap();
@@ -31,8 +31,9 @@ fn main() {
 
     let s = std::time::Instant::now();
     vm.run();
+    // vm.debug();
     println!("Took {:?}ms", s.elapsed().as_millis());
 
-    // println!("{:?}", vm.heap.0);
+    // println!("{:?}", vm.heap.internal);
     // println!("{:?}", vm.scopes[0].0);
 }

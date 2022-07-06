@@ -3,7 +3,6 @@ use std::{borrow::Cow, thread, time, usize};
 use super::{
     instruction::{Instr, Type},
     memory::Memory,
-    scope::{id, Scope},
     stack::{Stack, StackValue},
 };
 
@@ -12,7 +11,8 @@ pub struct VM {
     pub pc: usize,
 
     pub stack: Stack,
-    pub scopes: Vec<Scope>,
+    pub call_stack: Vec<usize>,
+
     pub fp: usize,
 
     pub heap: Memory,
@@ -27,7 +27,7 @@ impl VM {
             stack: Stack::new(),
             heap: Memory::new(),
 
-            scopes: vec![Scope::new(0)],
+            call_stack: vec![0],
             fp: 0,
         }
     }
@@ -59,27 +59,27 @@ impl VM {
         }
     }
 
-    pub fn all_scopes_get(&self, id: id) -> Option<usize> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(addr) = scope.get(id) {
-                return Some(addr);
-            }
-        }
+    // pub fn all_scopes_get(&self, id: id) -> Option<usize> {
+    //     for scope in self.scopes.iter().rev() {
+    //         if let Some(addr) = scope.get(id) {
+    //             return Some(addr);
+    //         }
+    //     }
 
-        None
-    }
+    //     None
+    // }
 
-    pub fn all_scopes_get_desc(&self, id: id) -> Option<usize> {
-        let mut n = 0;
-        for scope in self.scopes.iter().rev() {
-            if let Some(addr) = scope.get(id - n) {
-                return Some(addr);
-            }
-            n += 1;
-        }
+    // pub fn all_scopes_get_desc(&self, id: id) -> Option<usize> {
+    //     let mut n = 0;
+    //     for scope in self.scopes.iter().rev() {
+    //         if let Some(addr) = scope.get(id - n) {
+    //             return Some(addr);
+    //         }
+    //         n += 1;
+    //     }
 
-        None
-    }
+    //     None
+    // }
 
     pub fn peek_stack(&mut self) -> Option<&Type> {
         if let Some(value) = self.stack.peek() {
@@ -120,23 +120,25 @@ impl VM {
         )
     }
 
-    pub fn delete_locals(&mut self, scope: &Scope) {
-        for addr in scope.0.values() {
-            // println!("DELETING LOCAL {}", addr);
-            self.heap.delete(*addr);
-        }
-    }
+    // pub fn delete_locals(&mut self, scope: &Scope) {
+    //     for addr in scope.0.values() {
+    //         // println!("DELETING LOCAL {}", addr);
+    //         self.heap.delete(*addr);
+    //     }
+    // }
 
     pub fn enter_scope(&mut self, return_to: usize) {
-        self.scopes.push(Scope::new(return_to));
+        // self.scopes.push(Scope::new(return_to));
+        self.call_stack.push(return_to);
         self.fp += 1;
     }
 
     pub fn exit_scope(&mut self) -> usize {
-        let scope = self.scopes.pop().expect("Exited from empty scope");
-        self.delete_locals(&scope);
+        // let scope = self.scopes.pop().expect("Exited from empty scope");
+        let return_to = self.call_stack.pop().expect("Exited from empty scope");
+        // self.heap.free(amnt);
         self.fp -= 1;
-        scope.1
+        return_to
     }
 
     pub fn step(&mut self) {
@@ -154,65 +156,37 @@ impl VM {
             Instr::Pop => {
                 self.stack.pop();
             }
-            Instr::Store(id) => {
-                let id = *id + self.fp;
+
+            Instr::StoreLocal(offset) => {
+                let addr = *offset + self.fp;
                 let value = self.pop_stack().into_owned();
 
-                if let Some(addr) = self.all_scopes_get(id) {
-                    self.heap.set(addr, value);
-                } else {
-                    let addr = self.heap.add(value);
-                    self.scopes[self.fp].set(id, addr);
-                }
+                self.heap.set(addr, value);
             }
-            Instr::StoreLocal(id) => {
-                let id = *id + self.fp;
+            Instr::StoreGlobal(offset) => {
+                let addr = *offset;
                 let value = self.pop_stack().into_owned();
 
-                if let Some(addr) = self.scopes[self.fp].get(id) {
-                    self.heap.set(addr, value);
-                } else {
-                    let addr = self.heap.add(value);
-                    self.scopes[self.fp].set(id, addr);
-                }
-            }
-            Instr::StoreGlobal(id) => {
-                let id = *id;
-                let value = self.pop_stack().into_owned();
-
-                if let Some(addr) = self.scopes[0].get(id) {
-                    self.heap.set(addr, value);
-                } else {
-                    let addr = self.heap.add(value);
-                    self.scopes[self.fp].set(id, addr);
-                }
+                self.heap.set(addr, value);
             }
 
-            Instr::Register(id, addr) => {
-                self.scopes[self.fp].set(*id, *addr);
-            }
-            Instr::Load(id) => {
-                let id = *id + self.fp;
-                let addr = self.all_scopes_get(id).expect("Undefined variable ");
+            // Instr::Load(offset) => {
+            //     let addr = *offset + self.fp;
+            //     let value = self.heap.get(addr);
+            //     self.stack.push(StackValue::Literal(value.clone()));
+            // }
+            Instr::LoadAddr(offset) => {
+                let addr = *offset;
                 self.stack.push(StackValue::Addr(addr));
             }
-            Instr::LoadGlobal(id) => {
-                let addr = self.scopes[0].get(*id).expect("Undefined variable");
+            Instr::LoadLocal(offset) => {
+                let addr = *offset + self.fp;
                 self.stack.push(StackValue::Addr(addr));
             }
-            Instr::LoadLocal(id) => {
-                let id = *id + self.fp;
-                let addr = self.scopes[self.fp].get(id).expect("Undefined variable");
-                self.stack.push(StackValue::Addr(addr));
+            Instr::LoadGlobal(offset) => {
+                self.stack.push(StackValue::Addr(*offset));
             }
-            Instr::LoadName(id) => {
-                let id = *id + self.fp;
-                let addr = self.all_scopes_get_desc(id).expect("Undefined variable");
 
-                // let value = self.heap.get(addr);
-                // self.stack.push(StackValue::Literal(value.clone()));
-                self.stack.push(StackValue::Addr(addr));
-            }
             Instr::Jump(to) => {
                 self.pc = *to;
             }
@@ -223,10 +197,7 @@ impl VM {
                 let c_val = self.pop_stack();
                 let value = c_val.as_ref();
 
-                if value == &TRUE
-                // && value != &Type::Number(0.0)
-                // && value != &Type::String("".to_owned())
-                {
+                if value == &TRUE {
                     self.pc = to;
                 }
             }
@@ -237,16 +208,12 @@ impl VM {
                 let c_val = self.pop_stack();
                 let value = c_val.as_ref();
 
-                if value == &FALSE
-                // || value == &Type::Number(0.0)
-                // || value == &Type::String("".to_owned())
-                {
+                if value == &FALSE {
                     self.pc = to;
                 }
             }
 
             Instr::Call => {
-                // let addr = self.all_scopes_get(id).expect("Call to undefined function");
                 let c_val = self.pop_stack();
                 let top = c_val.as_ref();
 
@@ -257,17 +224,9 @@ impl VM {
                 } else {
                     panic!("Call to non-function {:?}", top);
                 }
-
-                // let addr = self.scopes[self.fp]
-                //     .get(id)
-                //     .expect("Call to undefined function");
             }
             Instr::Return => {
                 let value = &self.stack.pop();
-                // let (c1, c2) = self.double_pop_stack();
-                // let value = c1.to_owned();
-                // let addr = c2.as_ref();
-
                 match value {
                     StackValue::Literal(_) => {
                         self.stack.push(value.to_owned());
@@ -345,6 +304,8 @@ impl VM {
                 let (c1, c2) = self.double_pop_stack();
                 let rhs = c1.as_ref();
                 let lhs = c2.as_ref();
+
+                // println!("Eq {:?} {:?}", lhs, rhs);
 
                 let result = match (&lhs, &rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs == rhs),
@@ -489,7 +450,7 @@ impl VM {
             }
             Instr::Noop => {}
             _ => {
-                println!("NOT HANDLED: {:?}", instruction);
+                panic!("NOT HANDLED: {:?}", instruction);
             }
         }
     }
