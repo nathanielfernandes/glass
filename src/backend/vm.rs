@@ -1,7 +1,4 @@
-use std::{
-    io::{stdout, Write},
-    thread, time, usize,
-};
+use std::{borrow::Cow, thread, time, usize};
 
 use super::{
     instruction::{Instr, Type},
@@ -95,13 +92,32 @@ impl VM {
         None
     }
 
-    pub fn pop_stack(&mut self) -> Type {
+    pub fn pop_stack<'a>(&'a mut self) -> Cow<'a, Type> {
         let value = self.stack.pop();
 
         match value {
-            StackValue::Literal(value) => value,
-            StackValue::Addr(addr) => self.heap.get(addr).to_owned(),
+            StackValue::Literal(value) => Cow::Owned(value),
+            StackValue::Addr(addr) => {
+                let val = self.heap.get(addr);
+                Cow::Borrowed(&*val)
+            }
         }
+    }
+
+    pub fn double_pop_stack<'a>(&'a mut self) -> (Cow<'a, Type>, Cow<'a, Type>) {
+        let value1 = self.stack.pop();
+        let value2 = self.stack.pop();
+
+        (
+            match value1 {
+                StackValue::Literal(value) => Cow::Owned(value),
+                StackValue::Addr(addr) => Cow::Borrowed(self.heap.get(addr)),
+            },
+            match value2 {
+                StackValue::Literal(value) => Cow::Owned(value),
+                StackValue::Addr(addr) => Cow::Borrowed(self.heap.get(addr)),
+            },
+        )
     }
 
     pub fn delete_locals(&mut self, scope: &Scope) {
@@ -140,7 +156,7 @@ impl VM {
             }
             Instr::Store(id) => {
                 let id = *id + self.fp;
-                let value = self.pop_stack();
+                let value = self.pop_stack().into_owned();
 
                 if let Some(addr) = self.all_scopes_get(id) {
                     self.heap.set(addr, value);
@@ -151,7 +167,7 @@ impl VM {
             }
             Instr::StoreLocal(id) => {
                 let id = *id + self.fp;
-                let value = self.pop_stack();
+                let value = self.pop_stack().into_owned();
 
                 if let Some(addr) = self.scopes[self.fp].get(id) {
                     self.heap.set(addr, value);
@@ -162,7 +178,7 @@ impl VM {
             }
             Instr::StoreGlobal(id) => {
                 let id = *id;
-                let value = self.pop_stack();
+                let value = self.pop_stack().into_owned();
 
                 if let Some(addr) = self.scopes[0].get(id) {
                     self.heap.set(addr, value);
@@ -178,16 +194,16 @@ impl VM {
             Instr::Load(id) => {
                 let id = *id + self.fp;
                 let addr = self.all_scopes_get(id).expect("Undefined variable ");
-                self.stack.push(StackValue::Addr(addr.clone()));
+                self.stack.push(StackValue::Addr(addr));
             }
             Instr::LoadGlobal(id) => {
                 let addr = self.scopes[0].get(*id).expect("Undefined variable");
-                self.stack.push(StackValue::Addr(addr.clone()));
+                self.stack.push(StackValue::Addr(addr));
             }
             Instr::LoadLocal(id) => {
                 let id = *id + self.fp;
                 let addr = self.scopes[self.fp].get(id).expect("Undefined variable");
-                self.stack.push(StackValue::Addr(addr.clone()));
+                self.stack.push(StackValue::Addr(addr));
             }
             Instr::LoadName(id) => {
                 let id = *id + self.fp;
@@ -195,29 +211,35 @@ impl VM {
 
                 // let value = self.heap.get(addr);
                 // self.stack.push(StackValue::Literal(value.clone()));
-                self.stack.push(StackValue::Addr(addr.clone()));
+                self.stack.push(StackValue::Addr(addr));
             }
             Instr::Jump(to) => {
                 self.pc = *to;
             }
             Instr::JumpIf(to) => {
-                let to = *to;
-                let value = self.pop_stack();
+                const TRUE: Type = Type::Bool(true);
 
-                if value == Type::Bool(true)
-                    && value != Type::Number(0.0)
-                    && value != Type::String("".to_owned())
+                let to = *to;
+                let c_val = self.pop_stack();
+                let value = c_val.as_ref();
+
+                if value == &TRUE
+                // && value != &Type::Number(0.0)
+                // && value != &Type::String("".to_owned())
                 {
                     self.pc = to;
                 }
             }
             Instr::JumpIfNot(to) => {
-                let to = *to;
-                let value = self.pop_stack();
+                const FALSE: Type = Type::Bool(false);
 
-                if value == Type::Bool(false)
-                    || value == Type::Number(0.0)
-                    || value == Type::String("".to_owned())
+                let to = *to;
+                let c_val = self.pop_stack();
+                let value = c_val.as_ref();
+
+                if value == &FALSE
+                // || value == &Type::Number(0.0)
+                // || value == &Type::String("".to_owned())
                 {
                     self.pc = to;
                 }
@@ -225,9 +247,11 @@ impl VM {
 
             Instr::Call => {
                 // let addr = self.all_scopes_get(id).expect("Call to undefined function");
-                let top = self.pop_stack();
+                let c_val = self.pop_stack();
+                let top = c_val.as_ref();
+
                 if let Type::FuncPtr(jump) = top {
-                    // let jump = *jump;
+                    let jump = *jump;
                     self.enter_scope(self.pc);
                     self.pc = jump;
                 } else {
@@ -240,6 +264,10 @@ impl VM {
             }
             Instr::Return => {
                 let value = &self.stack.pop();
+                // let (c1, c2) = self.double_pop_stack();
+                // let value = c1.to_owned();
+                // let addr = c2.as_ref();
+
                 match value {
                     StackValue::Literal(_) => {
                         self.stack.push(value.to_owned());
@@ -253,20 +281,22 @@ impl VM {
             }
 
             Instr::Add => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs + rhs),
-                    (Type::String(lhs), Type::String(rhs)) => Type::String(lhs + &rhs),
+                    // (Type::String(lhs), Type::String(rhs)) => Type::String(lhs + rhs),
                     _ => panic!("Addition not supported"),
                 };
 
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Sub => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs - rhs),
@@ -276,8 +306,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Mul => {
-                let lhs = self.pop_stack();
-                let rhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs * rhs),
@@ -287,8 +318,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Div => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs / rhs),
@@ -298,8 +330,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Mod => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs % rhs),
@@ -309,8 +342,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Eq => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (&lhs, &rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs == rhs),
@@ -322,8 +356,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Neq => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs != rhs),
@@ -335,8 +370,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Lt => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs < rhs),
@@ -346,8 +382,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Gt => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs > rhs),
@@ -357,8 +394,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Lte => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs <= rhs),
@@ -368,8 +406,9 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Gte => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Bool(lhs >= rhs),
@@ -379,29 +418,32 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::And => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
-                    (Type::Bool(lhs), Type::Bool(rhs)) => Type::Bool(lhs && rhs),
+                    (Type::Bool(lhs), Type::Bool(rhs)) => Type::Bool(*lhs && *rhs),
                     _ => panic!("And not supported"),
                 };
 
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Or => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
-                    (Type::Bool(lhs), Type::Bool(rhs)) => Type::Bool(lhs || rhs),
+                    (Type::Bool(lhs), Type::Bool(rhs)) => Type::Bool(*lhs || *rhs),
                     _ => panic!("Or not supported"),
                 };
 
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Not => {
-                let value = self.pop_stack();
+                let c_val = self.pop_stack();
+                let value = c_val.as_ref();
 
                 let result = match value {
                     Type::Bool(value) => Type::Bool(!value),
@@ -411,7 +453,8 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Neg => {
-                let value = self.pop_stack();
+                let c_val = self.pop_stack();
+                let value = c_val.as_ref();
 
                 let result = match value {
                     Type::Number(value) => Type::Number(-value),
@@ -421,22 +464,29 @@ impl VM {
                 self.stack.push(StackValue::Literal(result));
             }
             Instr::Pow => {
-                let rhs = self.pop_stack();
-                let lhs = self.pop_stack();
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
-                    (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs.powf(rhs)),
+                    (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs.powf(*rhs)),
                     _ => panic!("Power not supported"),
                 };
 
                 self.stack.push(StackValue::Literal(result));
             }
-            Instr::Print => match self.pop_stack() {
-                Type::String(value) => println!("{}", value),
-                Type::Number(value) => println!("{}", value),
-                Type::Bool(value) => println!("{}", value),
-                _ => panic!("Print not supported"),
-            },
+            Instr::Print => {
+                let c = self.pop_stack();
+                let value = c.as_ref();
+
+                match value {
+                    Type::String(value) => println!("{}", value),
+                    Type::Number(value) => println!("{}", value),
+                    Type::Bool(value) => println!("{}", value),
+                    _ => println!("{:?}", value),
+                    // _ => panic!("Print not supported"),
+                }
+            }
             Instr::Noop => {}
             _ => {
                 println!("NOT HANDLED: {:?}", instruction);

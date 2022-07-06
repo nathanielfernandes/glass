@@ -12,6 +12,8 @@ pub enum Type {
     Bool(bool),
     None,
 
+    Null,
+
     Addr(usize),
     FuncPtr(usize),
 
@@ -25,6 +27,7 @@ impl fmt::Debug for Type {
             Type::String(s) => write!(f, "str({})", s),
             Type::Bool(b) => write!(f, "bool({})", b),
             Type::None => write!(f, "none"),
+            Type::Null => write!(f, "null"),
             Type::Addr(addr) => write!(f, "#{}", addr),
             Type::FuncPtr(addr) => write!(f, "fn(@{})", addr),
             Type::Error(s) => write!(f, "Error({})", s),
@@ -42,6 +45,8 @@ pub enum Instr {
     LoadLocal(id),
     LoadGlobal(id),
     LoadName(id),
+
+    LoadAddr(addr),
 
     Store(id),
     StoreLocal(id),
@@ -397,6 +402,9 @@ impl Instr {
             Expr::Call(name, args) => {
                 let (id, dep) = state.get(&name).expect("Function not found").clone();
 
+                // let return_addr = ins.len();
+                // ins!(Self::Noop);
+
                 for arg in args.into_iter().rev() {
                     build!(arg, dep);
                 }
@@ -406,6 +414,7 @@ impl Instr {
                 } else {
                     load!(id, dep);
                 }
+
                 ins!(Self::Call);
             }
             Expr::Return(expr) => {
@@ -472,6 +481,7 @@ impl fmt::Debug for Instr {
             Self::LoadLocal(id) => write!(f, "LoadLocal\t{}", id),
             Self::LoadGlobal(id) => write!(f, "LoadGlobal\t{}", id),
             Self::LoadName(id) => write!(f, "LoadName    \t{}", id),
+            Self::LoadAddr(id) => write!(f, "LoadAddr    \t{}", id),
 
             Self::Store(id) => write!(f, "Store    \t{}", id),
             Self::StoreLocal(id) => write!(f, "StoreLocal\t{}", id),

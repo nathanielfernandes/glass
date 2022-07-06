@@ -18,8 +18,8 @@ impl fmt::Debug for StackValue {
 }
 
 pub struct Stack {
-    pub internal: Vec<StackValue>,
-    pub sp: usize,
+    internal: Vec<StackValue>,
+    // pub sp: usize,
     // pub fp: usize,
 }
 
@@ -27,7 +27,7 @@ impl Stack {
     pub fn new() -> Stack {
         Stack {
             internal: Vec::new(),
-            sp: 0,
+            // sp: 0,
             // fp: 0,
         }
     }
@@ -35,7 +35,7 @@ impl Stack {
     pub fn new_with(first: StackValue) -> Stack {
         Stack {
             internal: vec![first],
-            sp: 0,
+            // sp: 0,
             // fp: 0,
         }
     }
@@ -43,21 +43,21 @@ impl Stack {
     #[inline]
     pub fn push(&mut self, value: StackValue) {
         self.internal.push(value);
-        self.sp += 1;
+        // self.sp += 1;
     }
     #[inline]
     pub fn pop(&mut self) -> StackValue {
         let val = self.internal.pop().expect("Popped from empty stack");
-        self.sp -= 1;
+        // self.sp -= 1;
         val
     }
 
-    #[inline]
-    pub fn try_pop(&mut self) {
-        if self.sp > 1 {
-            println!("POPPED {:?}", self.pop());
-        }
-    }
+    // #[inline]
+    // pub fn try_pop(&mut self) {
+    //     if self.sp > 1 {
+    //         println!("POPPED {:?}", self.pop());
+    //     }
+    // }
 
     #[inline]
     pub fn peek(&self) -> Option<&StackValue> {
