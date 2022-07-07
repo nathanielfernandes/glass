@@ -54,6 +54,8 @@ Glass generates high level bytecode which is interpreted by it's stack based VM.
 | Call |  | pops a value off the stack and jumps to the value if it is a function ptr |
 | Return |  | pops a value off the stack and jumps to the return address |
 | | | |
+| Join | | pops two values off the stack and joins them |
+| JoinMany | amount | pops values off the stack and joins them |
 | print |  | prints the value on the stack (temporary)|
 | binary_ops... |  | pops two values off the stack and pushes the result |
 
