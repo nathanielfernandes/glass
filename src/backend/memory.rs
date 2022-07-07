@@ -89,7 +89,21 @@ impl Memory {
     //     self.next_addr -= 1;
     // }
 
+    pub fn cleanup(&mut self) {
+        let mut amnt = 0;
+        for item in self.0.iter().rev() {
+            if item == &Type::Null {
+                amnt += 1;
+            } else {
+                self.0.drain(self.0.len() - amnt..);
+                return;
+            }
+        }
+    }
+
     pub fn free(&mut self, addr: usize) {
-        self.0[addr] = Type::Null;
+        if addr < self.0.len() {
+            self.0[addr] = Type::Null;
+        }
     }
 }

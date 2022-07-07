@@ -9,15 +9,18 @@ use super::{
 const FALSE: Type = Type::Bool(false);
 const TRUE: Type = Type::Bool(true);
 
+// native functions
+
 pub struct VM {
     pub program: Vec<Instr>,
     pub pc: usize,
 
     pub stack: Stack,
-    pub call_stack: Vec<usize>,
+    pub call_stack: Vec<(usize, usize)>,
 
     pub fp: usize,
 
+    pub local_addrs: Vec<usize>,
     pub heap: Memory,
 }
 
@@ -29,9 +32,10 @@ impl VM {
 
             stack: Stack::new(),
 
+            local_addrs: vec![],
             call_stack: {
                 let mut cs = Vec::with_capacity(1000);
-                cs.push(0);
+                cs.push((0, 0));
                 cs
             },
 
@@ -103,16 +107,17 @@ impl VM {
         )
     }
 
-    // pub fn free_locals(&mut self, amnt: usize) {
-    //     // for _ in 0..amnt {
-    //     //     self.heap.free();
-    //     // }
-    // }
+    pub fn free_locals(&mut self, amnt: usize) {
+        for _ in 0..amnt {
+            self.heap.free(self.local_addrs.pop().unwrap());
+        }
+        self.heap.cleanup()
+    }
 
     #[inline]
     pub fn enter_scope(&mut self, return_to: usize) {
         // self.scopes.push(Scope::new(return_to));
-        self.call_stack.push(return_to);
+        self.call_stack.push((return_to, 0));
         self.fp += 1;
 
         // if self.fp > 1000 {
@@ -123,10 +128,10 @@ impl VM {
     #[inline]
     pub fn exit_scope(&mut self) -> usize {
         // let scope = self.scopes.pop().expect("Exited from empty scope");
-        let return_to = self.call_stack.pop().expect("Exited from empty scope");
+        let (return_to, amnt) = self.call_stack.pop().expect("Exited from empty scope");
         // self.heap.free(amnt);
 
-        // self.free_locals(amnt);
+        self.free_locals(amnt);
         self.fp -= 1;
         return_to
     }
@@ -157,7 +162,9 @@ impl VM {
                 let addr = *offset + self.fp;
                 let value = self.pop_stack().into_owned();
                 self.heap.set(addr, value);
-                // self.call_stack[self.fp].1 += 1;
+
+                self.call_stack[self.fp].1 += 1;
+                self.local_addrs.push(addr);
             }
             Instr::StoreGlobal(offset) => {
                 let addr = *offset;
@@ -235,7 +242,8 @@ impl VM {
 
                 let result = match (lhs, rhs) {
                     (Type::Number(lhs), Type::Number(rhs)) => Type::Number(lhs + rhs),
-                    // (Type::String(lhs), Type::String(rhs)) => Type::String(lhs + rhs),
+                    (Type::String(lhs), rhs) => Type::String(lhs.to_owned() + &rhs.to_string()),
+                    (lhs, Type::String(rhs)) => Type::String(lhs.to_string() + rhs),
                     _ => panic!("Addition not supported"),
                 };
 
@@ -425,6 +433,60 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
+            // Instr::Index => {
+            //     let (c1, c2) = self.double_pop_stack();
+            //     let rhs = c1.as_ref();
+            //     let lhs = c2.as_ref();
+
+            //     let result = match (lhs, rhs) {
+            //         (Type::List(lhs), Type::Number(rhs)) => {
+            //             let index = *rhs as usize;
+            //             if index >= lhs.len() {
+            //                 panic!("Index out of bounds");
+            //             }
+            //             lhs[index].clone()
+            //         }
+            //         _ => panic!("Index not supported"),
+            //     };
+
+            //     self.stack.push(StackValue::Literal(result));
+            // }
+            Instr::Join => {
+                let (c1, c2) = self.double_pop_stack();
+                let rhs = c1.as_ref();
+                let lhs = c2.as_ref();
+
+                let result = match (lhs, rhs) {
+                    (Type::String(lhs), rhs) => {
+                        Type::String(lhs.to_owned() + " " + &rhs.to_string())
+                    }
+                    (lhs, Type::String(rhs)) => Type::String(lhs.to_string() + " " + rhs),
+                    _ => panic!("Power not supported"),
+                };
+
+                self.stack.push(StackValue::Literal(result));
+            }
+            Instr::JoinMany(amnt) => {
+                let mut res = None;
+
+                for _ in 0..*amnt {
+                    let c_val = self.pop_stack();
+                    let value = c_val.as_ref();
+
+                    if let Some(result) = res {
+                        res = Some(match (result, value) {
+                            (lhs, Type::String(value)) => Type::String(lhs.to_string() + value),
+                            (Type::String(value), rhs) => Type::String(value + &rhs.to_string()),
+                            _ => panic!("Join not supported"),
+                        });
+                    } else {
+                        res = Some(value.to_owned());
+                    }
+                }
+                self.stack
+                    .push(StackValue::Literal(res.unwrap_or(Type::None)));
+            }
+
             Instr::Print => {
                 let c = self.pop_stack();
                 let value = c.as_ref();
@@ -433,7 +495,7 @@ impl VM {
                     Type::String(value) => println!("{}", value),
                     Type::Number(value) => println!("{}", value),
                     Type::Bool(value) => println!("{}", value),
-                    _ => println!("{:?}", value),
+                    _ => println!("{}", &value.to_string()),
                     // _ => panic!("Print not supported"),
                 }
             }

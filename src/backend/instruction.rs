@@ -20,6 +20,21 @@ pub enum Type {
     Error(String),
 }
 
+impl Type {
+    pub fn to_string(&self) -> String {
+        match self {
+            Type::Number(n) => n.to_string(),
+            Type::String(s) => s.clone(),
+            Type::Bool(b) => b.to_string(),
+            Type::None => "none".to_string(),
+            Type::Null => "null".to_string(),
+            Type::Addr(a) => format!("<addr={}>", a),
+            Type::FuncPtr(f) => format!("<function at={}>", f),
+            Type::Error(e) => format!("Error({})", e),
+        }
+    }
+}
+
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -46,12 +61,12 @@ pub enum Instr {
 
     // Load(offset),
     // LoadDeref(offset),
-    LoadAddr(offset),
+    LoadAddr(addr),
     LoadLocal(offset),
     LoadGlobal(offset),
 
     // Store(offset),
-    StoreAddr(offset),
+    StoreAddr(addr),
     StoreLocal(offset),
     StoreGlobal(offset),
 
@@ -82,6 +97,9 @@ pub enum Instr {
     Eq,
     Neq,
 
+    Index,
+    Join,
+    JoinMany(usize),
     Print,
 }
 
@@ -230,11 +248,39 @@ impl Instr {
             Expr::String(str) => {
                 push_literal!(Type::String(str));
             }
+            Expr::FormatString(string) => {
+                let n = string.len();
+
+                if n == 0 {
+                    push_literal!(Type::String("".to_string()));
+                } else if n == 1 {
+                    build!(string[0].clone());
+                // } else if n == 2 {
+                // build!(string[0].clone());
+                // build!(string[1].clone());
+                // ins!(Self::Add);
+                } else {
+                    for expr in string.iter().rev() {
+                        build!(expr.clone());
+                    }
+                    ins.push(Self::JoinMany(n));
+                }
+            }
+            Expr::Join(lhs, rhs) => {
+                build!(*lhs);
+                build!(*rhs);
+                ins!(Self::Join);
+            }
             Expr::Bool(bool) => {
                 push_literal!(Type::Bool(bool));
             }
             Expr::None => {
                 push_literal!(Type::None);
+            }
+            Expr::Index { item, index } => {
+                build!(*item);
+                build!(*index);
+                ins!(Self::Index);
             }
             Expr::Declaration(name, value) => {
                 build!(*value);
@@ -580,6 +626,9 @@ impl fmt::Debug for Instr {
             Self::Call => write!(f, "Call              "),
             Self::Return => write!(f, "Return           "),
 
+            Self::JoinMany(amnt) => write!(f, "JoinMany    \t{}", amnt),
+            Self::Join => write!(f, "Join           "),
+            Self::Index => write!(f, "Index          "),
             Self::Print => write!(f, "Print           "),
 
             Self::Add => write!(f, "Add              "),
