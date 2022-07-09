@@ -433,34 +433,38 @@ impl VM {
 
                 self.stack.push(StackValue::Literal(result));
             }
-            // Instr::Index => {
-            //     let (c1, c2) = self.double_pop_stack();
-            //     let rhs = c1.as_ref();
-            //     let lhs = c2.as_ref();
+            Instr::Index => {
+                let (c1, c2) = self.double_pop_stack();
+                let item = c1.as_ref();
+                let index = c2.as_ref();
 
-            //     let result = match (lhs, rhs) {
-            //         (Type::List(lhs), Type::Number(rhs)) => {
-            //             let index = *rhs as usize;
-            //             if index >= lhs.len() {
-            //                 panic!("Index out of bounds");
-            //             }
-            //             lhs[index].clone()
-            //         }
-            //         _ => panic!("Index not supported"),
-            //     };
-
-            //     self.stack.push(StackValue::Literal(result));
-            // }
+                let result = match (item, index) {
+                    // (Type::List(list), Type::Number(index)) => {
+                    //     let index = index as usize;
+                    //     if index >= list.len() {
+                    //         panic!("Index out of bounds");
+                    //     }
+                    //     list[index].clone()
+                    // }
+                    (Type::String(string), Type::Number(index)) => {
+                        let index = *index as usize;
+                        if index >= string.len() {
+                            panic!("Index out of bounds");
+                        }
+                        Type::String(string.chars().nth(index).unwrap().to_string())
+                    }
+                    _ => panic!("Index not supported"),
+                };
+                self.stack.push(StackValue::Literal(result));
+            }
             Instr::Join => {
                 let (c1, c2) = self.double_pop_stack();
                 let rhs = c1.as_ref();
                 let lhs = c2.as_ref();
 
                 let result = match (lhs, rhs) {
-                    (Type::String(lhs), rhs) => {
-                        Type::String(lhs.to_owned() + " " + &rhs.to_string())
-                    }
-                    (lhs, Type::String(rhs)) => Type::String(lhs.to_string() + " " + rhs),
+                    (Type::String(lhs), rhs) => Type::String(lhs.to_owned() + &rhs.to_string()),
+                    (lhs, Type::String(rhs)) => Type::String(lhs.to_string() + rhs),
                     _ => panic!("Power not supported"),
                 };
 

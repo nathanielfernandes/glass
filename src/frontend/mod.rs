@@ -1,3 +1,5 @@
+pub mod second;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     // Comment(String),
@@ -10,7 +12,7 @@ pub enum Expr {
     Identifier(String),
 
     Declaration(String, Box<Expr>),
-    Assignment(String, Box<Expr>),
+    Assignment(Box<Expr>, Box<Expr>),
 
     Index {
         item: Box<Expr>,
@@ -29,7 +31,8 @@ pub enum Expr {
         body: Vec<Expr>,
     },
     Lambda(Vec<String>, Vec<Expr>),
-    Call(String, Vec<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
+    NativeCall(String, Vec<Expr>),
 
     Join(Box<Expr>, Box<Expr>),
 
@@ -142,15 +145,22 @@ peg::parser!(
         rule number() -> f64
         = float() / integer()
 
+
+        // rule index() -> Expr
+        // = _ n:value() "[" _ s:(e:value() **<1,2> ":") _ "]" _  {
+        //     if s.len() == 2 {
+        //         Expr::Slice{item:Box::new(n), start:Box::new(s[0].clone()), end:Box::new(s[1].clone())}
+        //     } else {
+        //         Expr::Index{item:Box::new(n), index:Box::new(s[0].clone())}
+        //     }
+        // }
+
+
         #[cache_left_rec]
         rule index() -> Expr
-        = _ n:value() "[" _ s:(e:value() **<1,2> ":") _ "]" {
-            if s.len() == 2 {
-                Expr::Slice{item:Box::new(n), start:Box::new(s[0].clone()), end:Box::new(s[1].clone())}
-            } else {
-                Expr::Index{item:Box::new(n), index:Box::new(s[0].clone())}
-            }
-        }
+        = n:(i:index(){i} / s:call(){s} / s:string(){Expr::String(s)} / s:format_string(){s} / s:symbol(){Expr::Identifier(s)})
+        "[" _ i:value() _ "]" { Expr::Index{item: Box::new(n.clone()), index: Box::new(i.clone())} }
+
 
         rule bool() -> bool
         = "true" { true } / "false" { false }
@@ -171,9 +181,14 @@ peg::parser!(
         code:block() _
         { Expr::Lambda(params, code)}
 
+        #[cache_left_rec]
         rule call() -> Expr
-        = _ name:symbol() _ "(" args:((_ e:value() _ {e})  ** ",") ")" _
-        { Expr::Call(name, args) }
+        = _ name:( c:call() / i:index() / s:symbol(){Expr::Identifier(s)} ) _ "(" args:((_ e:value() _ {e})  ** ",") ")" _
+        { Expr::Call(Box::new(name), args) }
+
+        rule native_call() -> Expr
+        = _ "#" name:symbol() _ "(" args:((_ e:value() _ {e})  ** ",") ")" _
+        { Expr::NativeCall(name, args) }
 
         rule _return() -> Expr
         = _ "return" e:(__ e:value() _ { e } / _ { Expr::None }) {Expr::Return(Box::new(e))}
@@ -182,7 +197,7 @@ peg::parser!(
         = _ "let" __ name:symbol() _ value:(("=" _ value:value() _ { value }) / { Expr::None }) { Expr::Declaration(name, Box::new(value)) }
 
         rule assignment() -> Expr
-        = _ name:symbol() _ "=" _ value:value() _ { Expr::Assignment(name, Box::new(value)) };
+        = _ name:(i:index(){i} / s:call(){s} / s:symbol(){Expr::Identifier(s)}) _ "=" _ value:value() _ { Expr::Assignment(Box::new(name), Box::new(value)) };
 
         // #[cache_left_rec]
         // rule join() -> Expr
@@ -205,19 +220,24 @@ peg::parser!(
             Expr::If{ condition: Box::new(condition), then, otherwise: otherwise.unwrap_or(vec![])}
         }
 
+
+
+        rule item() -> Expr
+        = i:index(){i} / s:call(){s} / s:symbol(){Expr::Identifier(s)}
+
         #[cache_left_rec]
         rule arithmetic() -> Expr
         = precedence! {
             _ "(" _ x:arithmetic() _ ")" _ { x }
             --
-            x:symbol() _ "++" _ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Add, Box::new(Expr::Identifier(x)), Box::new(Expr::Number(1.0)))))}
-            x:symbol() _ "--" _ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Sub, Box::new(Expr::Identifier(x)), Box::new(Expr::Number(1.0)))))}
-            x:symbol() _ "+=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Add, Box::new(Expr::Identifier(x)), Box::new(y))))}
-            x:symbol() _ "-=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Sub, Box::new(Expr::Identifier(x)), Box::new(y))))}
-            x:symbol() _ "*=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Mul, Box::new(Expr::Identifier(x)), Box::new(y))))}
-            x:symbol() _ "/=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Div, Box::new(Expr::Identifier(x)), Box::new(y))))}
-            x:symbol() _ "%=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Mod, Box::new(Expr::Identifier(x)), Box::new(y))))}
-            x:symbol() _ "**=" _ y:@ {Expr::Assignment(x.clone(), Box::new(Expr::Op(Op::Pow, Box::new(Expr::Identifier(x)), Box::new(y))))}
+            x:item() _ "++" _ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Add, Box::new(x), Box::new(Expr::Number(1.0)))))}
+            x:item() _ "--" _ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Sub, Box::new(x), Box::new(Expr::Number(1.0)))))}
+            x:item() _ "+=" _ y:@ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Add, Box::new(x), Box::new(y))))}
+            x:item() _ "-=" _ y:@ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Sub, Box::new(x), Box::new(y))))}
+            x:item() _ "*=" _ y:@ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Mul, Box::new(x), Box::new(y))))}
+            x:item() _ "/=" _ y:@ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Div, Box::new(x), Box::new(y))))}
+            x:item() _ "%=" _ y:@ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Mod, Box::new(x), Box::new(y))))}
+            x:item() _ "**=" _ y:@ {Expr::Assignment(Box::new(x.clone()), Box::new(Expr::Op(Op::Pow, Box::new(x), Box::new(y))))}
             --
             x:(@) _ ".." _  y:@ {Expr::Join(Box::new(x), Box::new(y))}
             x:(@) _ "+" _  y:@ {Expr::Op(Op::Add, Box::new(x), Box::new(y))}
@@ -251,38 +271,46 @@ peg::parser!(
             x:(@) _ ">" _  y:@ { Expr::Op(Op::Gt, Box::new(x), Box::new(y)) }
             --
             x:value_end() { x }
-            "!" _  x:operation() { Expr::Op(Op::Not, Box::new(x), Box::new(Expr::None)) }
+            "!" _  x:operation() {
+                if let Expr::Bool(b) = x {
+                    return Expr::Bool(!b)
+                }
+                Expr::Op(Op::Not, Box::new(x), Box::new(Expr::None))
+            }
         }
 
         #[cache_left_rec]
         rule value_end() -> Expr
         = precedence!{
-            c:call() { c }
             n:index() { n }
+            n:native_call() { n }
+            c:call() { c }
             --
             n:bool() { Expr::Bool(n) }
             n:none() { Expr::None }
             n:number() { Expr::Number(n) }
-            s:string() { Expr::String(s) }
             s:format_string() { s }
+            s:string() { Expr::String(s) }
             n:symbol() { Expr::Identifier(n) }
         }
 
         #[cache_left_rec]
         rule value() -> Expr
         = precedence!{
+
             n:arithmetic() { n }
             n:operation() { n }
             // n:lambda() { n }
             --
-            c:call() { c }
             n:index() { n }
+            n:native_call() { n }
+            c:call() { c }
             --
             n:bool() { Expr::Bool(n) }
             n:none() { Expr::None }
             n:number() { Expr::Number(n) }
-            s:string() { Expr::String(s) }
             s:format_string() { s }
+            s:string() { Expr::String(s) }
             n:symbol() { Expr::Identifier(n) }
         }
 
@@ -304,15 +332,16 @@ peg::parser!(
             n:arithmetic() { n }
             n:operation() { n }
             --
+            n:native_call() { n }
             n:call() { n }
+            n:index() { n }
             --
             n:bool() { Expr::Bool(n) }
             n:none() { Expr::None }
             n:number() { Expr::Number(n) }
-            s:string() { Expr::String(s) }
             s:format_string() { s }
+            s:string() { Expr::String(s) }
             n:symbol() { Expr::Identifier(n) }
-
         }
 
         rule parse() -> Expr =

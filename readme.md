@@ -18,7 +18,37 @@ print(val)
 ```
 832040
 ```
+## Features
 Right now, Glass is just a hobby project that I'm using to explore language design and compiler development.
+
+```rust
+// recursion
+fn fib(n) {
+    // branching (aswell as short circuiting)
+    if (n == 0 || n == 1) {
+        return n
+    } else {
+        return fib(n - 1) + fib(n - 2)
+    }
+}   
+
+// functional features
+fn run_func(n, func) {
+    return func(n)
+}
+let val = return_func(30, fib)
+
+
+// format  strings
+let name = "nathan"
+let age = 40
+print(f"my name is {name} and i am {age / 2} years old")
+
+
+// indexing
+let name = "nathan"
+print(name[0])
+```
 
 
 ## How it works
@@ -56,6 +86,7 @@ Glass generates high level bytecode which is interpreted by it's stack based VM.
 | | | |
 | Join | | pops two values off the stack and joins them |
 | JoinMany | amount | pops values off the stack and joins them |
+| Index |  | pops two values off the stack and gets the index of the first value by the second value |
 | print |  | prints the value on the stack (temporary)|
 | binary_ops... |  | pops two values off the stack and pushes the result |
 

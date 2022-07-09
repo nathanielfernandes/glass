@@ -98,6 +98,7 @@ pub enum Instr {
     Neq,
 
     Index,
+    IndexStore,
     Join,
     JoinMany(usize),
     Print,
@@ -278,8 +279,18 @@ impl Instr {
                 push_literal!(Type::None);
             }
             Expr::Index { item, index } => {
-                build!(*item);
+                // match item
+
+                // if let Expr::String(s) = *item {
+                //     if let Expr::Number(n) = *index {
+                //         build!(Expr::String(s.chars().nth(n as usize).unwrap().to_string()))
+                //     }
+                // } else {
+
+                // }
+
                 build!(*index);
+                build!(*item);
                 ins!(Self::Index);
             }
             Expr::Declaration(name, value) => {
@@ -307,17 +318,30 @@ impl Instr {
                     declare!(id, depth);
                 }
             }
-            Expr::Assignment(name, value) => {
-                let (id, dep) = state
-                    .get(&name)
-                    .expect(&format!("Variable not found {}", name))
-                    .clone();
-                // let id = get_id(&name);
-                *next += 1;
-                build!(*value);
-                // Self::build(ins, *value, state, depth + 1, next, stack);
-                // op!(Self::Store(id));
-                assign!(id, dep);
+            Expr::Assignment(assignee, value) => {
+                match *assignee {
+                    Expr::Identifier(name) => {
+                        let (id, dep) = state
+                            .get(&name)
+                            .expect(&format!("Variable not found {}", name))
+                            .clone();
+                        // let id = get_id(&name);
+                        *next += 1;
+                        build!(*value);
+                        // Self::build(ins, *value, state, depth + 1, next, stack);
+                        // op!(Self::Store(id));
+                        assign!(id, dep);
+                    }
+                    Expr::Index { item, index } => {
+                        // match *item => {
+                        //     Expr::Identifier(name) => {
+
+                        //     }
+                        // }
+                    }
+                    Expr::Call(_, _) => {}
+                    _ => panic!("cannot assign"),
+                }
             }
             // Expr::Walrus(name, value) => {
             //     build!(*value);
@@ -523,26 +547,29 @@ impl Instr {
                 }
             }
             Expr::Call(name, args) => {
-                let (id, dep) = state.get(&name).expect("Function not found").clone();
-
-                // let return_addr = ins.len();
-                // ins!(Self::Noop);
-
+                // if let Expr::Identifier(name) = *name {
+                //     let (id, dep) = state.get(&name).expect("Function not found").clone();
+                //     // let return_addr = ins.len();
+                //     // ins!(Self::Noop);
+                //     for arg in args.into_iter().rev() {
+                //         build!(arg);
+                //     }
+                //     // println!("{} {:?}", depth, state);
+                //     // if dep != 0 && dep < depth {
+                //     //     ins!(Self::LoadAddr(id + dep))
+                //     // } else {
+                //     load!(id, dep);
+                //     // }
+                //     // load!(id, dep);
+                //     ins!(Self::Call);
+                // } else {
                 for arg in args.into_iter().rev() {
                     build!(arg);
                 }
 
-                // println!("{} {:?}", depth, state);
-
-                // if dep != 0 && dep < depth {
-                //     ins!(Self::LoadAddr(id + dep))
-                // } else {
-                load!(id, dep);
-                // }
-
-                // load!(id, dep);
-
+                build!(*name);
                 ins!(Self::Call);
+                // }
             }
             Expr::Return(expr) => {
                 // build!(*expr);
@@ -571,7 +598,53 @@ impl Instr {
                     Op::Neg => ins!(Self::Neg),
                     Op::Pow => ins!(Self::Pow),
                 }
-            }
+            } // match (*lhs, *rhs) {
+            //     (Expr::Number(lhs), Expr::Number(rhs)) => match op {
+            //         Op::Add => build!(Expr::Number(lhs + rhs)),
+            //         Op::Sub => build!(Expr::Number(lhs - rhs)),
+            //         Op::Mul => build!(Expr::Number(lhs * rhs)),
+            //         Op::Div => build!(Expr::Number(lhs / rhs)),
+            //         Op::Mod => build!(Expr::Number(lhs % rhs)),
+            //         Op::Pow => build!(Expr::Number(lhs.powf(rhs))),
+            //         Op::Eq => build!(Expr::Bool(lhs == rhs)),
+            //         Op::Neq => build!(Expr::Bool(lhs != rhs)),
+            //         Op::Lt => build!(Expr::Bool(lhs < rhs)),
+            //         Op::Gt => build!(Expr::Bool(lhs > rhs)),
+            //         Op::Lte => build!(Expr::Bool(lhs <= rhs)),
+            //         Op::Gte => build!(Expr::Bool(lhs >= rhs)),
+            //         Op::Neg => build!(Expr::Number(-lhs)),
+            //         _ => panic!("cannot perform op"),
+            //     },
+            //     (Expr::Bool(lhs), Expr::Bool(rhs)) => match op {
+            //         Op::Eq => build!(Expr::Bool(lhs == rhs)),
+            //         Op::Neq => build!(Expr::Bool(lhs != rhs)),
+            //         Op::And => build!(Expr::Bool(lhs && rhs)),
+            //         Op::Or => build!(Expr::Bool(lhs || rhs)),
+            //         _ => panic!("cannot perform op"),
+            //     },
+            //     (lhs, rhs) => {
+            //         Self::build(ins, lhs, state, depth, next);
+            //         Self::build(ins, rhs, state, depth, next);
+            //         match op {
+            //             Op::Add => ins!(Self::Add),
+            //             Op::Sub => ins!(Self::Sub),
+            //             Op::Mul => ins!(Self::Mul),
+            //             Op::Div => ins!(Self::Div),
+            //             Op::Mod => ins!(Self::Mod),
+            //             Op::Eq => ins!(Self::Eq),
+            //             Op::Neq => ins!(Self::Neq),
+            //             Op::Lt => ins!(Self::Lt),
+            //             Op::Gt => ins!(Self::Gt),
+            //             Op::Lte => ins!(Self::Lte),
+            //             Op::Gte => ins!(Self::Gte),
+            //             Op::Or => ins!(Self::Or),
+            //             Op::And => ins!(Self::And),
+            //             Op::Not => ins!(Self::Not),
+            //             Op::Neg => ins!(Self::Neg),
+            //             Op::Pow => ins!(Self::Pow),
+            //         }
+            //     }
+            // },
             _ => {
                 panic!("Not implemented");
             }
@@ -629,6 +702,7 @@ impl fmt::Debug for Instr {
             Self::JoinMany(amnt) => write!(f, "JoinMany    \t{}", amnt),
             Self::Join => write!(f, "Join           "),
             Self::Index => write!(f, "Index          "),
+            Self::IndexStore => write!(f, "IndexStore          "),
             Self::Print => write!(f, "Print           "),
 
             Self::Add => write!(f, "Add              "),

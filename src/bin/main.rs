@@ -38,6 +38,6 @@ fn main() {
     // vm.debug();
     println!("Took {:?}ms", s.elapsed().as_millis());
 
-    println!("{:?}", vm.heap.0);
+    // println!("{:?}", vm.heap.0);
     // println!("{:?}", vm.scopes[0].0);
 }
