@@ -7,7 +7,7 @@ use glass::backend::vm::VM;
 
 use glass::frontend::parser;
 
-fn write_program(program: &Vec<Instr>, path: &path::Path) {
+fn write_program(program: &[Instr], path: &path::Path) {
     let mut file = File::create(path).unwrap();
     write!(file, "ln#\topcode    \toffset/value\n").unwrap();
     write!(file, "-------------------------\n").unwrap();
@@ -21,13 +21,13 @@ fn main() {
     let s = std::time::Instant::now();
 
     let code = read_to_string(path::Path::new("src/bin/test.rv")).unwrap();
-
     let ast = parser::parse_code(&code).unwrap();
-    // println!("{:#?}", ast);
+    let (program, prog_start) = Instr::compile(ast);
 
-    let program = Instr::compile(ast);
-
-    write_program(&program, path::Path::new("src/bin/test.rv.out"));
+    write_program(
+        &program[prog_start..],
+        path::Path::new("src/bin/test.rv.out"),
+    );
 
     let mut vm = VM::new();
     vm.program = program;

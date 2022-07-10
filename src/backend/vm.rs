@@ -221,6 +221,10 @@ impl VM {
                     panic!("Call to non-function {:?}", top);
                 }
             }
+            Instr::NativeCall(nf) => {
+                let nf = nf.clone();
+                nf.call(self);
+            }
             Instr::Return => {
                 let value = &self.stack.pop();
                 match value {
@@ -457,6 +461,30 @@ impl VM {
                 };
                 self.stack.push(StackValue::Literal(result));
             }
+            // Instr::IndexStore => {
+            //     let item = self.stack.pop();
+            //     let (c1, c2) = self.double_pop_stack();
+            //     let value = c1.as_ref();
+            //     let index = c2.as_ref();
+
+            //     match (item, index) {
+            //         (StackValue::Addr(addr), Type::Number(idx)) => {
+            //             let idx = *idx as usize;
+            //             let mut v = self.heap.get_mut(addr);
+            //             match (v, value) {
+            //                 (Type::String(s1), Type::String(s2)) => {
+            //                     if idx >= s1.len() {
+            //                         panic!("Index out of bounds");
+            //                     }
+
+            //                     replace_nth_char_ascii(s1, idx, s2.f)
+            //                 }
+            //                 _ => panic!("Index store not supported on type"),
+            //             }
+            //         }
+            //         _ => panic!("Index store not supported"),
+            //     }
+            // }
             Instr::Join => {
                 let (c1, c2) = self.double_pop_stack();
                 let rhs = c1.as_ref();
@@ -490,19 +518,6 @@ impl VM {
                 self.stack
                     .push(StackValue::Literal(res.unwrap_or(Type::None)));
             }
-
-            Instr::Print => {
-                let c = self.pop_stack();
-                let value = c.as_ref();
-
-                match value {
-                    Type::String(value) => println!("{}", value),
-                    Type::Number(value) => println!("{}", value),
-                    Type::Bool(value) => println!("{}", value),
-                    _ => println!("{}", &value.to_string()),
-                    // _ => panic!("Print not supported"),
-                }
-            }
             Instr::Noop => {}
             _ => {
                 panic!("NOT HANDLED: {:?}", instruction);
@@ -510,3 +525,12 @@ impl VM {
         }
     }
 }
+
+// fn replace_nth_char_ascii(s: &mut str, idx: usize, newchar: char) {
+//     let s_bytes: &mut [u8] = unsafe { s.as_bytes_mut() };
+//     assert!(idx < s_bytes.len());
+//     assert!(s_bytes[idx].is_ascii());
+//     assert!(newchar.is_ascii());
+//     // we've made sure this is safe.
+//     s_bytes[idx] = newchar as u8;
+// }

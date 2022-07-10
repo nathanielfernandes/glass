@@ -71,6 +71,10 @@ impl Memory {
         &self.0[index]
     }
 
+    pub fn get_mut(&mut self, index: usize) -> &mut Type {
+        &mut self.0[index]
+    }
+
     // pub fn pop(&mut self, index: usize) -> Type {
     //     self.internal.remove(index)
     // }

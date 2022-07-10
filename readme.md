@@ -82,12 +82,12 @@ Glass generates high level bytecode which is interpreted by it's stack based VM.
 | JumpIf | address | pops a value off the stack sets the pc to the given address if the value is true |
 | JumpIfNot | address | pops a value off the stack sets the pc to the given address if the value is false |
 | Call |  | pops a value off the stack and jumps to the value if it is a function ptr |
+| NativeCall | | calls a native rust function |
 | Return |  | pops a value off the stack and jumps to the return address |
 | | | |
 | Join | | pops two values off the stack and joins them |
 | JoinMany | amount | pops values off the stack and joins them |
 | Index |  | pops two values off the stack and gets the index of the first value by the second value |
-| print |  | prints the value on the stack (temporary)|
 | binary_ops... |  | pops two values off the stack and pushes the result |
 
 

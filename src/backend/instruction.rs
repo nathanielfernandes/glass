@@ -1,9 +1,12 @@
-use crate::frontend::{Expr, Op, AST};
+use crate::{
+    frontend::{Expr, Op, AST},
+    stdlib::{add_std, NativeFunction},
+};
 // use hashbrown::HashMap;
 use fxhash::FxHashMap;
 use std::fmt;
 
-use super::{memory::addr, stack::StackValue, stdlib::add_std};
+use super::{memory::addr, stack::StackValue};
 
 #[derive(Clone, PartialEq)]
 pub enum Type {
@@ -39,7 +42,7 @@ impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Type::Number(n) => write!(f, "num({})", n),
-            Type::String(s) => write!(f, "str({})", s),
+            Type::String(s) => write!(f, "str({:?})", s),
             Type::Bool(b) => write!(f, "bool({})", b),
             Type::None => write!(f, "none"),
             Type::Null => write!(f, "null"),
@@ -78,6 +81,7 @@ pub enum Instr {
     JumpIf(usize),
     JumpIfNot(usize),
     Call,
+    NativeCall(NativeFunction),
     Return,
 
     Add,
@@ -101,18 +105,19 @@ pub enum Instr {
     IndexStore,
     Join,
     JoinMany(usize),
-    Print,
 }
 
 pub type State = FxHashMap<String, (usize, usize)>;
 
 impl Instr {
-    pub fn compile(ast: AST) -> Vec<Instr> {
+    pub fn compile(ast: AST) -> (Vec<Instr>, usize) {
         let mut program = vec![];
         let mut state = FxHashMap::default();
         let mut next = 0;
 
+        // add_std(&mut program, &mut state, 0, &mut next);
         add_std(&mut program, &mut state, 0, &mut next);
+        let prog_start = program.len();
         Self::iter_build(&mut program, ast, &mut state, 0, &mut next);
 
         let mut last = None;
@@ -146,7 +151,7 @@ impl Instr {
             last = Some(op);
         }
 
-        program
+        (program, prog_start)
     }
 
     pub fn iter_build(
@@ -332,14 +337,18 @@ impl Instr {
                         // op!(Self::Store(id));
                         assign!(id, dep);
                     }
-                    Expr::Index { item, index } => {
-                        // match *item => {
-                        //     Expr::Identifier(name) => {
+                    // Expr::Index { item, index } => {
+                    //     build!(*index);
+                    //     build!(*value);
+                    //     build!(*item);
+                    //     ins!(Self::IndexStore);
+                    //     // match *item => {
+                    //     //     Expr::Identifier(name) => {
 
-                        //     }
-                        // }
-                    }
-                    Expr::Call(_, _) => {}
+                    //     //     }
+                    //     // }
+                    // }
+                    // Expr::Call(_, _) => {}
                     _ => panic!("cannot assign"),
                 }
             }
@@ -571,6 +580,17 @@ impl Instr {
                 ins!(Self::Call);
                 // }
             }
+            Expr::NativeCall(name, args) => {
+                for arg in args.into_iter().rev() {
+                    build!(arg);
+                }
+
+                if let Some(nf) = NativeFunction::from(&name) {
+                    ins!(Self::NativeCall(nf));
+                } else {
+                    panic!("Native function not found: {}", name);
+                }
+            }
             Expr::Return(expr) => {
                 // build!(*expr);
 
@@ -656,13 +676,13 @@ impl Instr {
             Self::Halt => false,
             Self::Jump(_) => false,
             Self::Pop => false,
-            Self::Print => false,
             // Self::Store(_) => false,
             Self::StoreAddr(_) => false,
             Self::StoreGlobal(_) => false,
             Self::StoreLocal(_) => false,
             // Self::Register(_, _) => false,
             // Self::Call => false,
+            Self::IndexStore => false,
             Self::Return => false,
             Self::JumpIfNot(_) => false,
             Self::JumpIf(_) => false,
@@ -697,13 +717,13 @@ impl fmt::Debug for Instr {
             Self::JumpIf(id) => write!(f, "JumpIf  \t{}", id),
             Self::JumpIfNot(id) => write!(f, "JumpIfNot\t{}", id),
             Self::Call => write!(f, "Call              "),
+            Self::NativeCall(id) => write!(f, "NativeCall\t{:?}", id),
             Self::Return => write!(f, "Return           "),
 
-            Self::JoinMany(amnt) => write!(f, "JoinMany    \t{}", amnt),
+            Self::JoinMany(amnt) => write!(f, "JoinMany\t{}", amnt),
             Self::Join => write!(f, "Join           "),
             Self::Index => write!(f, "Index          "),
             Self::IndexStore => write!(f, "IndexStore          "),
-            Self::Print => write!(f, "Print           "),
 
             Self::Add => write!(f, "Add              "),
             Self::Sub => write!(f, "Sub              "),
