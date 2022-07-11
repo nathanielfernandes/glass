@@ -131,7 +131,7 @@ impl VM {
         let (return_to, amnt) = self.call_stack.pop().expect("Exited from empty scope");
         // self.heap.free(amnt);
 
-        self.free_locals(amnt);
+        // self.free_locals(amnt);
         self.fp -= 1;
         return_to
     }
@@ -163,8 +163,8 @@ impl VM {
                 let value = self.pop_stack().into_owned();
                 self.heap.set(addr, value);
 
-                self.call_stack[self.fp].1 += 1;
-                self.local_addrs.push(addr);
+                // self.call_stack[self.fp].1 += 1;
+                // self.local_addrs.push(addr);
             }
             Instr::StoreGlobal(offset) => {
                 let addr = *offset;

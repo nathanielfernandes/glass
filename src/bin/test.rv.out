@@ -1,13 +1,40 @@
 ln#	opcode    	offset/value
 -------------------------
-0:	Push    	str("enter your name: ")
-1:	LoadGlobal	1
-2:	Call              
-3:	StoreGlobal	2
-4:	LoadGlobal	2
-5:	Push    	str("you name is ")
-6:	JoinMany	2
-7:	LoadGlobal	0
-8:	Call              
-9:	Pop           
+0:	Jump    	264
+1:	StoreLocal	8
+2:	LoadLocal	8
+3:	Push    	num(0)
+4:	LoadLocal	8
+5:	Push    	num(1)
+6:	Eq              
+7:	Or              
+8:	Eq              
+9:	JumpIfNot	250
+10:	LoadLocal	8
+11:	Return           
+12:	Jump    	262
+13:	LoadLocal	8
+14:	Push    	num(1)
+15:	Sub              
+16:	LoadGlobal	7
+17:	Call              
+18:	LoadLocal	8
+19:	Push    	num(2)
+20:	Sub              
+21:	LoadGlobal	7
+22:	Call              
+23:	Add              
+24:	Return           
+25:	Push    	none
+26:	Return           
+27:	Push    	fn(@238)
+28:	StoreGlobal	7
+29:	NativeCall	time
+30:	StoreGlobal	8
+31:	LoadGlobal	8
+32:	LoadGlobal	6
+33:	Call              
+34:	LoadGlobal	0
+35:	Call              
+36:	Pop           
 -------------------------

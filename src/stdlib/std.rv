@@ -7,3 +7,11 @@ fn input(str) {
     #flushout()
     return #stdin()
 }
+
+fn timeit(f) {
+    let start = #time()
+    f()
+    let end = #time()
+    #stdout(f"Took: {end - start}ms\n")
+}
+

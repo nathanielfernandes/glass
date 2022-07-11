@@ -1,6 +1,7 @@
 use std::fs::read_to_string;
 use std::io::Write;
 use std::path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use fxhash::FxHashMap;
 
@@ -61,6 +62,10 @@ native!(
     fn flushout() {
         std::io::stdout().flush().ok().expect("Failed to flush stdout");
         Type::None
+    }
+
+    fn time() {
+        Type::Number(SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get time").as_millis() as f64)
     }
 );
 

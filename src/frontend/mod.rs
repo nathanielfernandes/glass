@@ -178,7 +178,7 @@ peg::parser!(
 
         rule lambda() -> Expr
         = _ "(" params:(symbol() ** ",") ")" _ "=>" _
-        code:block() _
+        code:(code:block() {code} / n:value() {vec![Expr::Return(Box::new(n))]}) _
         { Expr::Lambda(params, code)}
 
         #[cache_left_rec]
@@ -249,6 +249,7 @@ peg::parser!(
             --
             x:(@) _ "**" _  y:@ {Expr::Op(Op::Pow, Box::new(x), Box::new(y))}
             --
+            x:operation() { x }
             x:value_end() { x }
             "-" _ e:arithmetic() { Expr::Op(Op::Neg, Box::new(e), Box::new(Expr::None)) }
         }
@@ -270,7 +271,9 @@ peg::parser!(
             x:(@) _ "<" _  y:@ { Expr::Op(Op::Lt, Box::new(x), Box::new(y)) }
             x:(@) _ ">" _  y:@ { Expr::Op(Op::Gt, Box::new(x), Box::new(y)) }
             --
+            x:arithmetic() { x }
             x:value_end() { x }
+
             "!" _  x:operation() {
                 if let Expr::Bool(b) = x {
                     return Expr::Bool(!b)
@@ -282,6 +285,8 @@ peg::parser!(
         #[cache_left_rec]
         rule value_end() -> Expr
         = precedence!{
+            n:lambda() { n }
+            --
             n:index() { n }
             n:native_call() { n }
             c:call() { c }
@@ -297,10 +302,9 @@ peg::parser!(
         #[cache_left_rec]
         rule value() -> Expr
         = precedence!{
-
-            n:arithmetic() { n }
             n:operation() { n }
-            // n:lambda() { n }
+            n:arithmetic() { n }
+            n:lambda() { n }
             --
             n:index() { n }
             n:native_call() { n }
@@ -324,13 +328,13 @@ peg::parser!(
             --
             n:assignment() { n }
             --
-            // n:lambda() { n }
+            n:lambda() { n }
             n:function() { n }
             --
             n:if_condition() { n }
             --
-            n:arithmetic() { n }
             n:operation() { n }
+            n:arithmetic() { n }
             --
             n:native_call() { n }
             n:call() { n }

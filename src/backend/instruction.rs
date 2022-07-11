@@ -303,25 +303,25 @@ impl Instr {
                 // Self::build(ins, *value, state, depth + 1, next, stack);
                 // let id = get_id(&name) + depth;
 
-                if let Some((id, dep)) = state.get(&name) {
-                    if *dep == depth {
-                        declare!(*id, *dep);
-                    } else {
-                        let id = depth + *next;
+                // if let Some((id, dep)) = state.get(&name) {
+                //     if *dep == depth {
+                //         declare!(*id, *dep);
+                //     } else {
+                //         let id = depth + *next;
 
-                        *next += 1;
-                        state.insert(name, (id.clone(), depth));
-                        // op!(Self::Store(id));
-                        declare!(id, depth);
-                    }
-                } else {
-                    let id = depth + *next;
+                //         *next += 1;
+                //         state.insert(name, (id.clone(), depth));
+                //         // op!(Self::Store(id));
+                //         declare!(id, depth);
+                //     }
+                // } else {
+                let id = depth + *next;
 
-                    *next += 1;
-                    state.insert(name, (id.clone(), depth));
-                    // op!(Self::Store(id));
-                    declare!(id, depth);
-                }
+                *next += 1;
+                state.insert(name, (id.clone(), depth));
+                // op!(Self::Store(id));
+                declare!(id, depth);
+                // }
             }
             Expr::Assignment(assignee, value) => {
                 match *assignee {
@@ -389,7 +389,36 @@ impl Instr {
 
                 // }
             }
+            Expr::Lambda(args, code) => {
+                let top = ins.len();
+                ins.push(Instr::Noop); // placeholder for return address
 
+                // let depth = depth + 1;
+                let mut new_next = *next;
+                // let id: usize = depth + *next;
+                *next += 1;
+                // state.insert(name, (id.clone(), depth));
+
+                let mut fn_state = state.clone();
+
+                for arg in args {
+                    let id = depth + 1 + new_next;
+                    new_next += 1;
+                    fn_state.insert(arg, (id.clone(), depth + 1));
+
+                    ins!(Self::StoreLocal(id));
+                }
+
+                Self::iter_build(ins, code, &mut fn_state, depth + 1, &mut new_next);
+
+                push_literal!(Type::None);
+                ins!(Self::Return);
+
+                ins[top] = Self::Jump(ins.len());
+
+                push_literal!(Type::FuncPtr(top + 1));
+                // declare!(id, depth);
+            }
             Expr::Function {
                 name,
                 args,
